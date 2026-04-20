@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+import requests
+
 from wikijs_graphql_tool.client import WikiJsClient, WikiJsError
 
 
@@ -10,7 +13,7 @@ class DummyResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"http {self.status_code}")
+            raise requests.HTTPError(f"http {self.status_code}")
 
     def json(self):
         return self._payload
@@ -83,3 +86,39 @@ def test_delete_page_by_path_raises_when_missing(monkeypatch):
         assert "No page found" in str(exc)
     else:
         raise AssertionError("Expected WikiJsError")
+
+
+def test_post_wraps_request_exception(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(*args, **kwargs):
+        raise requests.ConnectionError("boom")
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    with pytest.raises(WikiJsError, match="Request to Wiki.js failed"):
+        client._post("query { ping }")
+
+
+def test_post_wraps_graphql_errors(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(*args, **kwargs):
+        return DummyResponse({"errors": [{"message": "nope"}]})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    with pytest.raises(WikiJsError, match=r"GraphQL error\(s\): nope"):
+        client._post("query { ping }")
+
+
+def test_post_rejects_missing_data_payload(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(*args, **kwargs):
+        return DummyResponse({})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    with pytest.raises(WikiJsError, match="did not include a data payload"):
+        client._post("query { ping }")

@@ -18,17 +18,35 @@ class WikiJsClient:
     timeout: int = 30
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
-        response = requests.post(
-            self.url,
-            json={"query": query, "variables": variables or {}},
-            headers={"Authorization": f"Bearer {self.token}"},
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response = requests.post(
+                self.url,
+                json={"query": query, "variables": variables or {}},
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise WikiJsError(f"Request to Wiki.js failed: {exc}") from exc
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise WikiJsError("Wiki.js returned a non-JSON response") from exc
+
         if payload.get("errors"):
-            raise WikiJsError(json.dumps(payload["errors"], indent=2))
-        return payload["data"]
+            messages = []
+            for err in payload["errors"]:
+                if isinstance(err, dict):
+                    messages.append(err.get("message", json.dumps(err, sort_keys=True)))
+                else:
+                    messages.append(str(err))
+            raise WikiJsError("GraphQL error(s): " + "; ".join(messages))
+
+        data = payload.get("data")
+        if data is None:
+            raise WikiJsError("Wiki.js response did not include a data payload")
+        return data
 
     def list_pages(self) -> list[dict[str, Any]]:
         query = """

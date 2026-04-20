@@ -29,6 +29,20 @@ Early prototype, already validated against a live Wiki.js instance for read and 
 - `upsert`
 - `delete`
 
+## Usage examples
+
+```bash
+export WIKIJS_URL='https://example.com/graphql'
+export WIKIJS_TOKEN='your-token'
+
+wikijs-tool list --prefix ideas
+wikijs-tool get ideas/homeos
+wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
+wikijs-tool delete ideas/scratch
+```
+
+Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.
+
 ## Configuration
 
 Environment variables:
@@ -58,13 +72,11 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 
 ### Near-term development points
 
-- validate and harden `upsert`
-- validate and harden `delete`
-- improve error handling and GraphQL failure reporting
-- support JSON output consistently
-- support stdin/file-driven content updates cleanly
-- add tests for core page lifecycle behavior
+- tighten metadata semantics around descriptions/tags so updates are explicit and unsurprising
+- improve output shaping for human vs automation use
+- add more failure-path and compatibility tests
 - document compatibility assumptions with Wiki.js versions
+- consider lightweight structured models if raw dicts start getting mushy
 
 ### Possible future forms
 

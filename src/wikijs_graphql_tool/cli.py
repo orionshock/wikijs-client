@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from .client import WikiJsClient, WikiJsError
 
@@ -13,8 +14,13 @@ def build_client() -> WikiJsClient:
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
     if not url or not token:
-        raise SystemExit("WIKIJS_URL and WIKIJS_TOKEN must be set")
+        raise WikiJsError("WIKIJS_URL and WIKIJS_TOKEN must be set")
     return WikiJsClient(url=url, token=token)
+
+
+def emit(data: Any, *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(data, indent=2))
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -23,10 +29,11 @@ def cmd_list(args: argparse.Namespace) -> int:
     if args.prefix:
         pages = [p for p in pages if p["path"].startswith(args.prefix)]
     if args.json:
-        print(json.dumps(pages, indent=2))
+        emit(pages, as_json=True)
     else:
         for page in pages:
-            print(f'{page["id"]}\t{page["path"]}\t{page["title"]}')
+            description = page.get("description") or ""
+            print(f'{page["id"]}\t{page["path"]}\t{page["title"]}\t{description}')
     return 0
 
 
@@ -37,7 +44,7 @@ def cmd_get(args: argparse.Namespace) -> int:
         print(f"No page found at path: {args.path}", file=sys.stderr)
         return 1
     if args.json:
-        print(json.dumps(page, indent=2))
+        emit(page, as_json=True)
     else:
         print(page["content"])
     return 0
@@ -56,18 +63,26 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         description=args.description,
         tags=args.tags,
     )
-    print(json.dumps(result, indent=2))
+    if args.json:
+        emit(result, as_json=True)
+    else:
+        response = result.get("responseResult", {})
+        print(f"{result['action']}: {args.path} ({response.get('message', 'ok')})")
     return 0
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
     client = build_client()
     result = client.delete_page_by_path(args.path)
-    print(json.dumps(result, indent=2))
+    if args.json:
+        emit(result, as_json=True)
+    else:
+        response = result.get("responseResult", {})
+        print(f"deleted: {args.path} ({response.get('message', 'ok')})")
     return 0
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wikijs-tool")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -87,17 +102,26 @@ def main() -> int:
     p_upsert.add_argument("--file")
     p_upsert.add_argument("--description", default="")
     p_upsert.add_argument("--tags", nargs="*", default=[])
+    p_upsert.add_argument("--json", action="store_true")
     p_upsert.set_defaults(func=cmd_upsert)
 
     p_delete = sub.add_parser("delete")
     p_delete.add_argument("path")
+    p_delete.add_argument("--json", action="store_true")
     p_delete.set_defaults(func=cmd_delete)
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
     try:
         return args.func(args)
     except WikiJsError as exc:
-        print(str(exc), file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"File error: {exc}", file=sys.stderr)
         return 1
 
 
