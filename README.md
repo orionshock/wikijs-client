@@ -94,12 +94,67 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 - `cli.py`: argument parsing and terminal UX only
 - future adapters may expose the same core through MCP or another agent interface
 
-### Near-term development points
+### Roadmap
+
+#### Milestone 1, solid core CLI and library spine
+
+Goal: make the current read/list/upsert/delete tool feel dependable as a small reusable core.
+
+Desirable work:
 
 - add more failure-path and compatibility tests
-- document compatibility assumptions with Wiki.js versions
-- consider lightweight structured models if raw dicts start getting mushy
-- consider pagination or sorting controls if large wikis make list output noisy
+- tighten docstrings and internal API expectations around normalized models
+- make sure CLI JSON output stays stable and predictable for agent/tool callers
+- document compatibility assumptions with Wiki.js versions and schema expectations
+- keep transport, model, and CLI responsibilities clearly separated
+
+#### Milestone 2, stronger retrieval and query ergonomics
+
+Goal: improve how agents and scripts discover pages without turning the tool into a fuzzy magic layer.
+
+Desirable work:
+
+- add pagination controls for large wikis
+- add explicit sorting controls where the API supports them cleanly
+- consider exact-match and title/path helper queries if they can remain predictable
+- consider a search-oriented command that stays schema-conservative and machine-friendly
+- make large result sets easier to consume without prioritizing decorative terminal output
+
+#### Milestone 3, safer mutation workflows
+
+Goal: make writes more trustworthy and easier for agents to reason about.
+
+Desirable work:
+
+- expand mutation result data so callers can reliably inspect what changed
+- consider dry-run or validate-style flows where feasible
+- consider clearer conflict/error reporting for missing pages, duplicate paths, or schema surprises
+- add tests around metadata preservation and replacement edge cases
+- document write semantics carefully so omission vs replacement stays explicit
+
+#### Milestone 4, packaging for broader reuse
+
+Goal: keep the core implementation ready for use beyond one local CLI.
+
+Desirable work:
+
+- harden the package layout for publishing to PyPI if desired
+- consider a single-file packaged executable for simple ops workflows
+- keep the core library interface stable enough to back an MCP wrapper later
+- avoid interface decisions that would force a rewrite for agent-facing adapters
+- add a small versioning/release discipline once the API shape settles
+
+#### Milestone 5, agent-first interface layer
+
+Goal: support AI agent usage directly without compromising the clean core.
+
+Desirable work:
+
+- design an MCP or similar adapter around the existing library instead of embedding agent logic into the CLI
+- expose stable structured responses with minimal transformation
+- keep auth/config simple and explicit for headless environments
+- decide which operations are safe enough to expose by default in agent runtimes
+- add example agent integration docs once the core contract feels stable
 
 ### Possible future forms
 
