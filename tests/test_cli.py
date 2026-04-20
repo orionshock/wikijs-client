@@ -12,8 +12,8 @@ class DummyClient:
 
     def list_pages(self):
         return [
-            {"id": 1, "path": "ideas/a", "title": "A"},
-            {"id": 2, "path": "infra/b", "title": "B"},
+            {"id": 1, "path": "ideas/a", "title": "A", "description": "alpha note"},
+            {"id": 2, "path": "infra/b", "title": "B", "description": "beta infra"},
         ]
 
     def get_page_by_path(self, path):
@@ -31,7 +31,26 @@ class DummyClient:
 
 def test_cmd_list_filters_prefix(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix="ideas", json=False)
+    args = cli.argparse.Namespace(prefix="ideas", query=None, regex=None, json=False)
+    assert cli.cmd_list(args) == 0
+    out = capsys.readouterr().out
+    assert "ideas/a" in out
+    assert "infra/b" not in out
+    assert "ID" in out
+
+
+def test_cmd_list_filters_query(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(prefix=None, query="beta", regex=None, json=False)
+    assert cli.cmd_list(args) == 0
+    out = capsys.readouterr().out
+    assert "infra/b" in out
+    assert "ideas/a" not in out
+
+
+def test_cmd_list_filters_regex(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(prefix=None, query=None, regex=r"ideas/.*", json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "ideas/a" in out
@@ -74,6 +93,8 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
     assert cli.cmd_upsert(args) == 0
     out = capsys.readouterr().out
     assert "created: ideas/test" in out
+    assert "description preserved" in out
+    assert "tags preserved" in out
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):

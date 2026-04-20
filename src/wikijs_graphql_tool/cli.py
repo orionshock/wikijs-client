@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,17 +24,47 @@ def emit(data: Any, *, as_json: bool) -> None:
         print(json.dumps(data, indent=2))
 
 
+def truncate(value: str, width: int) -> str:
+    if len(value) <= width:
+        return value
+    return value[: max(0, width - 1)] + "…"
+
+
+def render_page_row(page: dict[str, Any]) -> str:
+    page_id = str(page.get("id", ""))
+    path = truncate(page.get("path", ""), 42)
+    title = truncate(page.get("title", ""), 28)
+    description = truncate(page.get("description") or "", 36)
+    return f"{page_id:>5}  {path:<42}  {title:<28}  {description}"
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     client = build_client()
     pages = client.list_pages()
     if args.prefix:
         pages = [p for p in pages if p["path"].startswith(args.prefix)]
+    if args.query:
+        needle = args.query.lower()
+        pages = [
+            p
+            for p in pages
+            if needle in (p.get("path", "").lower() + "\n" + p.get("title", "").lower() + "\n" + (p.get("description") or "").lower())
+        ]
+    if args.regex:
+        pattern = re.compile(args.regex)
+        pages = [
+            p
+            for p in pages
+            if pattern.search(p.get("path", "")) or pattern.search(p.get("title", "")) or pattern.search(p.get("description") or "")
+        ]
     if args.json:
         emit(pages, as_json=True)
     else:
+        print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
+        print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
         for page in pages:
-            description = page.get("description") or ""
-            print(f'{page["id"]}\t{page["path"]}\t{page["title"]}\t{description}')
+            print(render_page_row(page))
+        print(f"\n{len(pages)} page(s)")
     return 0
 
 
@@ -69,7 +100,15 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         emit(result, as_json=True)
     else:
         response = result.get("responseResult", {})
-        print(f"{result['action']}: {args.path} ({response.get('message', 'ok')})")
+        details = []
+        metadata = result.get("metadata") or {}
+        if metadata:
+            if metadata.get("description_preserved"):
+                details.append("description preserved")
+            if metadata.get("tags_preserved"):
+                details.append("tags preserved")
+        suffix = f" [{', '.join(details)}]" if details else ""
+        print(f"{result['action']}: {args.path} ({response.get('message', 'ok')}){suffix}")
     return 0
 
 
@@ -90,6 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_list = sub.add_parser("list")
     p_list.add_argument("--prefix")
+    p_list.add_argument("--query", help="case-insensitive substring filter across path, title, and description")
+    p_list.add_argument("--regex", help="regular expression filter across path, title, and description")
     p_list.add_argument("--json", action="store_true")
     p_list.set_defaults(func=cmd_list)
 

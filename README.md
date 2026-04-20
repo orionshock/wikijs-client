@@ -36,6 +36,8 @@ export WIKIJS_URL='https://example.com/graphql'
 export WIKIJS_TOKEN='your-token'
 
 wikijs-tool list --prefix ideas
+wikijs-tool list --query homeos
+wikijs-tool list --regex '^ideas/'
 wikijs-tool get ideas/homeos
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
@@ -43,6 +45,12 @@ wikijs-tool delete ideas/scratch
 ```
 
 Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.
+
+`list` now renders a compact table by default, and can filter by:
+
+- `--prefix`
+- `--query` for case-insensitive substring matching
+- `--regex` for regular expression matching
 
 ## Metadata update semantics
 
@@ -85,11 +93,10 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 
 ### Near-term development points
 
-- improve output shaping for human vs automation use
 - add more failure-path and compatibility tests
 - document compatibility assumptions with Wiki.js versions
 - consider lightweight structured models if raw dicts start getting mushy
-- consider page search/filter support beyond prefix matching
+- consider pagination or sorting controls if large wikis make list output noisy
 
 ### Possible future forms
 
