@@ -18,11 +18,11 @@ class DummyClient:
 
     def get_page_by_path(self, path):
         if path == "ideas/a":
-            return {"id": 1, "path": path, "title": "A", "content": "hello"}
+            return {"id": 1, "path": path, "title": "A", "content": "hello", "description": "", "tags": []}
         return None
 
     def upsert_page(self, **kwargs):
-        return {"action": "created", "responseResult": {"succeeded": True}, "page": {"path": kwargs["path"], "title": kwargs["title"]}}
+        return {"action": "created", "responseResult": {"succeeded": True}, "page": {"path": kwargs["path"], "title": kwargs["title"]}, "metadata": {"description_preserved": kwargs.get("preserve_description"), "tags_preserved": kwargs.get("preserve_tags")}}
 
     def delete_page_by_path(self, path):
         self.deleted.append(path)
@@ -50,7 +50,7 @@ def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
-    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="", tags=[], json=True)
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, json=True)
     assert cli.cmd_upsert(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "created"
@@ -70,7 +70,7 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
-    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="", tags=[], json=False)
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, json=False)
     assert cli.cmd_upsert(args) == 0
     out = capsys.readouterr().out
     assert "created: ideas/test" in out
@@ -92,3 +92,14 @@ def test_main_reports_missing_env(capsys, monkeypatch):
     assert cli.main(["list"]) != 0
     err = capsys.readouterr().err
     assert "WIKIJS_URL and WIKIJS_TOKEN must be set" in err
+
+
+def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="desc", tags=["a"], replace_description=True, replace_tags=True, json=True)
+    assert cli.cmd_upsert(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["metadata"]["description_preserved"] is False
+    assert out["metadata"]["tags_preserved"] is False

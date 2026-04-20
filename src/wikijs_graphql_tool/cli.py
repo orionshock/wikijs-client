@@ -62,6 +62,8 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         content=content,
         description=args.description,
         tags=args.tags,
+        preserve_description=not args.replace_description,
+        preserve_tags=not args.replace_tags,
     )
     if args.json:
         emit(result, as_json=True)
@@ -100,8 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_upsert.add_argument("path")
     p_upsert.add_argument("title")
     p_upsert.add_argument("--file")
-    p_upsert.add_argument("--description", default="")
-    p_upsert.add_argument("--tags", nargs="*", default=[])
+    p_upsert.add_argument("--description")
+    p_upsert.add_argument("--tags", nargs="*")
+    p_upsert.add_argument("--replace-description", action="store_true", help="replace existing description instead of preserving it when omitted")
+    p_upsert.add_argument("--replace-tags", action="store_true", help="replace existing tags instead of preserving them when omitted")
     p_upsert.add_argument("--json", action="store_true")
     p_upsert.set_defaults(func=cmd_upsert)
 

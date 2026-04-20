@@ -78,6 +78,10 @@ class WikiJsClient:
               title
               content
               description
+              tags {
+                tag
+                title
+              }
             }
           }
         }
@@ -158,23 +162,43 @@ class WikiJsClient:
         })
         return data["pages"]["update"]
 
-    def upsert_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> dict[str, Any]:
+    def upsert_page(
+        self,
+        *,
+        path: str,
+        title: str,
+        content: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        preserve_description: bool = True,
+        preserve_tags: bool = True,
+    ) -> dict[str, Any]:
         existing = self.get_page_by_path(path)
         if existing:
+            resolved_description = existing.get("description", "") if description is None and preserve_description else (description or "")
+            existing_tags = [t.get("tag") for t in existing.get("tags", []) if isinstance(t, dict) and t.get("tag")]
+            resolved_tags = existing_tags if tags is None and preserve_tags else (tags or [])
             result = self.update_page(
                 page_id=existing["id"],
                 path=path,
                 title=title,
                 content=content,
-                description=description,
-                tags=tags,
+                description=resolved_description,
+                tags=resolved_tags,
             )
-            return {"action": "updated", **result}
+            return {
+                "action": "updated",
+                "metadata": {
+                    "description_preserved": description is None and preserve_description,
+                    "tags_preserved": tags is None and preserve_tags,
+                },
+                **result,
+            }
         result = self.create_page(
             path=path,
             title=title,
             content=content,
-            description=description,
+            description=description or "",
             tags=tags,
         )
         return {"action": "created", **result}

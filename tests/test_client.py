@@ -38,7 +38,7 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
         calls.append((query, variables))
         if "list(orderBy: PATH)" in query:
             return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": ""}]}}
-        return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc"}}}
+        return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": [{"tag": "ideas", "title": "ideas"}]}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
     page = client.get_page_by_path("ideas/homeos")
@@ -64,16 +64,48 @@ def test_upsert_page_creates_when_missing(monkeypatch):
 
 def test_upsert_page_updates_when_existing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "get_page_by_path", lambda path: {"id": 99, "path": path, "title": "Old"})
-    monkeypatch.setattr(
-        client,
-        "update_page",
-        lambda **kwargs: {"responseResult": {"succeeded": True, "message": "Page has been updated.", "errorCode": 0}},
-    )
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: {"id": 99, "path": path, "title": "Old", "description": "kept", "tags": [{"tag": "ideas", "title": "ideas"}]})
+    captured = {}
+
+    def fake_update_page(**kwargs):
+        captured.update(kwargs)
+        return {"responseResult": {"succeeded": True, "message": "Page has been updated.", "errorCode": 0}}
+
+    monkeypatch.setattr(client, "update_page", fake_update_page)
 
     result = client.upsert_page(path="ideas/test", title="Test", content="# Test")
     assert result["action"] == "updated"
     assert result["responseResult"]["succeeded"] is True
+    assert captured["description"] == "kept"
+    assert captured["tags"] == ["ideas"]
+    assert result["metadata"]["description_preserved"] is True
+    assert result["metadata"]["tags_preserved"] is True
+
+
+def test_upsert_page_can_replace_description_and_tags(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: {"id": 99, "path": path, "title": "Old", "description": "kept", "tags": [{"tag": "ideas", "title": "ideas"}]})
+    captured = {}
+
+    def fake_update_page(**kwargs):
+        captured.update(kwargs)
+        return {"responseResult": {"succeeded": True, "message": "Page has been updated.", "errorCode": 0}}
+
+    monkeypatch.setattr(client, "update_page", fake_update_page)
+
+    result = client.upsert_page(
+        path="ideas/test",
+        title="Test",
+        content="# Test",
+        description="new desc",
+        tags=["new", "tags"],
+        preserve_description=False,
+        preserve_tags=False,
+    )
+    assert captured["description"] == "new desc"
+    assert captured["tags"] == ["new", "tags"]
+    assert result["metadata"]["description_preserved"] is False
+    assert result["metadata"]["tags_preserved"] is False
 
 
 def test_delete_page_by_path_raises_when_missing(monkeypatch):

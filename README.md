@@ -38,10 +38,23 @@ export WIKIJS_TOKEN='your-token'
 wikijs-tool list --prefix ideas
 wikijs-tool get ideas/homeos
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
+wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
 wikijs-tool delete ideas/scratch
 ```
 
 Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.
+
+## Metadata update semantics
+
+`upsert` tries to avoid surprising metadata loss.
+
+- if a page already exists and you omit `--description`, the existing description is preserved
+- if a page already exists and you omit `--tags`, the existing tags are preserved
+- if you want to explicitly replace them, use:
+  - `--replace-description`
+  - `--replace-tags`
+
+On create, omitted description/tags default to empty values.
 
 ## Configuration
 
@@ -72,11 +85,11 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 
 ### Near-term development points
 
-- tighten metadata semantics around descriptions/tags so updates are explicit and unsurprising
 - improve output shaping for human vs automation use
 - add more failure-path and compatibility tests
 - document compatibility assumptions with Wiki.js versions
 - consider lightweight structured models if raw dicts start getting mushy
+- consider page search/filter support beyond prefix matching
 
 ### Possible future forms
 
@@ -99,8 +112,18 @@ Current validation target:
 Current assumptions:
 
 - standard Wiki.js GraphQL `pages.list`, `pages.single`, `pages.create`, `pages.update`, and `pages.delete`
+- `pages.single` exposes `description` and `tags { tag title }`
 - token-based API auth via `Authorization: Bearer ...`
 - markdown editor mode
+
+Failure modes handled explicitly now include:
+
+- HTTP/request failures
+- non-JSON API responses
+- GraphQL error payloads
+- missing `data` payloads
+- missing required env vars
+- file read errors during CLI content loading
 
 This tool should remain conservative about relying on exotic or version-fragile fields.
 
