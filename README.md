@@ -20,7 +20,7 @@ The immediate form is a CLI, but the code should be shaped so it can also suppor
 
 ## Status
 
-Early prototype, already validated against a live Wiki.js instance for read operations.
+Early prototype, already validated against a live Wiki.js instance for read and basic page lifecycle operations.
 
 ## Current commands
 
@@ -77,10 +77,26 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 
 The code should be written so those are packaging/interface decisions, not rewrites.
 
+## Compatibility notes
+
+Current validation target:
+
+- Wiki.js GraphQL endpoint from Orion's local Wiki.js service
+- page lifecycle tested live for create, update, read, and delete
+
+Current assumptions:
+
+- standard Wiki.js GraphQL `pages.list`, `pages.single`, `pages.create`, `pages.update`, and `pages.delete`
+- token-based API auth via `Authorization: Bearer ...`
+- markdown editor mode
+
+This tool should remain conservative about relying on exotic or version-fragile fields.
+
 ## Development
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -e '.[dev]'
+pytest -q
 ```

@@ -23,6 +23,11 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+]
+
 [project.scripts]
 wikijs-tool = "wikijs_graphql_tool.cli:main"
 
