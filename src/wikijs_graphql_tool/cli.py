@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from .client import WikiJsClient, WikiJsError
+from .models import PageSummary
 
 
 def build_client() -> WikiJsClient:
+    """Build a client from environment variables."""
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
     if not url or not token:
@@ -20,21 +22,24 @@ def build_client() -> WikiJsClient:
 
 
 def emit(data: Any, *, as_json: bool) -> None:
+    """Emit structured output when JSON mode is requested."""
     if as_json:
         print(json.dumps(data, indent=2))
 
 
 def truncate(value: str, width: int) -> str:
+    """Truncate a string for compact human-readable table output."""
     if len(value) <= width:
         return value
     return value[: max(0, width - 1)] + "…"
 
 
-def render_page_row(page: dict[str, Any]) -> str:
-    page_id = str(page.get("id", ""))
-    path = truncate(page.get("path", ""), 42)
-    title = truncate(page.get("title", ""), 28)
-    description = truncate(page.get("description") or "", 36)
+def render_page_row(page: PageSummary) -> str:
+    """Render a single page summary as a compact aligned row."""
+    page_id = str(page.id)
+    path = truncate(page.path, 42)
+    title = truncate(page.title, 28)
+    description = truncate(page.description, 36)
     return f"{page_id:>5}  {path:<42}  {title:<28}  {description}"
 
 
@@ -42,23 +47,15 @@ def cmd_list(args: argparse.Namespace) -> int:
     client = build_client()
     pages = client.list_pages()
     if args.prefix:
-        pages = [p for p in pages if p["path"].startswith(args.prefix)]
+        pages = [p for p in pages if p.path.startswith(args.prefix)]
     if args.query:
         needle = args.query.lower()
-        pages = [
-            p
-            for p in pages
-            if needle in (p.get("path", "").lower() + "\n" + p.get("title", "").lower() + "\n" + (p.get("description") or "").lower())
-        ]
+        pages = [p for p in pages if needle in (p.path.lower() + "\n" + p.title.lower() + "\n" + p.description.lower())]
     if args.regex:
         pattern = re.compile(args.regex)
-        pages = [
-            p
-            for p in pages
-            if pattern.search(p.get("path", "")) or pattern.search(p.get("title", "")) or pattern.search(p.get("description") or "")
-        ]
+        pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
     if args.json:
-        emit(pages, as_json=True)
+        emit([page.to_dict() for page in pages], as_json=True)
     else:
         print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
         print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
@@ -75,9 +72,9 @@ def cmd_get(args: argparse.Namespace) -> int:
         print(f"No page found at path: {args.path}", file=sys.stderr)
         return 1
     if args.json:
-        emit(page, as_json=True)
+        emit(page.to_dict(), as_json=True)
     else:
-        print(page["content"])
+        print(page.content)
     return 0
 
 
@@ -97,18 +94,18 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         preserve_tags=not args.replace_tags,
     )
     if args.json:
-        emit(result, as_json=True)
+        emit(result.to_dict(), as_json=True)
     else:
-        response = result.get("responseResult", {})
+        result_payload = result.to_dict()
+        response = result_payload.get("responseResult", {})
         details = []
-        metadata = result.get("metadata") or {}
-        if metadata:
-            if metadata.get("description_preserved"):
-                details.append("description preserved")
-            if metadata.get("tags_preserved"):
-                details.append("tags preserved")
+        metadata = result.metadata or {}
+        if metadata.get("description_preserved"):
+            details.append("description preserved")
+        if metadata.get("tags_preserved"):
+            details.append("tags preserved")
         suffix = f" [{', '.join(details)}]" if details else ""
-        print(f"{result['action']}: {args.path} ({response.get('message', 'ok')}){suffix}")
+        print(f"{result.action}: {args.path} ({response.get('message', 'ok')}){suffix}")
     return 0
 
 
@@ -116,9 +113,9 @@ def cmd_delete(args: argparse.Namespace) -> int:
     client = build_client()
     result = client.delete_page_by_path(args.path)
     if args.json:
-        emit(result, as_json=True)
+        emit(result.to_dict(), as_json=True)
     else:
-        response = result.get("responseResult", {})
+        response = result.to_dict().get("responseResult", {})
         print(f"deleted: {args.path} ({response.get('message', 'ok')})")
     return 0
 

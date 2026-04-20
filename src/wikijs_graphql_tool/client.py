@@ -6,13 +6,17 @@ from typing import Any
 
 import requests
 
+from .models import MutationResult, PageDetail, PageSummary
+
 
 class WikiJsError(RuntimeError):
-    pass
+    """Raised when the Wiki.js API returns an unusable or failed response."""
 
 
 @dataclass
 class WikiJsClient:
+    """Minimal Wiki.js GraphQL client focused on practical page operations."""
+
     url: str
     token: str
     timeout: int = 30
@@ -48,7 +52,8 @@ class WikiJsClient:
             raise WikiJsError("Wiki.js response did not include a data payload")
         return data
 
-    def list_pages(self) -> list[dict[str, Any]]:
+    def list_pages(self) -> list[PageSummary]:
+        """Return page summaries suitable for listing and simple lookups."""
         query = """
         query {
           pages {
@@ -62,11 +67,12 @@ class WikiJsClient:
         }
         """
         data = self._post(query)
-        return data["pages"]["list"]
+        return [PageSummary.from_api(item) for item in data["pages"]["list"]]
 
-    def get_page_by_path(self, path: str) -> dict[str, Any] | None:
+    def get_page_by_path(self, path: str) -> PageDetail | None:
+        """Return a detailed page object by path, or None if it does not exist."""
         pages = self.list_pages()
-        match = next((p for p in pages if p["path"] == path), None)
+        match = next((p for p in pages if p.path == path), None)
         if not match:
             return None
         query = """
@@ -86,10 +92,11 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(query, {"id": match["id"]})
-        return data["pages"]["single"]
+        data = self._post(query, {"id": match.id})
+        return PageDetail.from_api(data["pages"]["single"])
 
-    def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> dict[str, Any]:
+    def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
+        """Create a page and return a normalized mutation result."""
         mutation = """
         mutation ($content: String!, $description: String!, $path: String!, $title: String!, $tags: [String!]!) {
           pages {
@@ -125,9 +132,18 @@ class WikiJsClient:
             "title": title,
             "tags": tags or [],
         })
-        return data["pages"]["create"]
+        result = data["pages"]["create"]
+        response = result["responseResult"]
+        return MutationResult(
+            action="created",
+            succeeded=bool(response.get("succeeded")),
+            message=response.get("message") or "",
+            error_code=response.get("errorCode"),
+            page=result.get("page"),
+        )
 
-    def update_page(self, *, page_id: int, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> dict[str, Any]:
+    def update_page(self, *, page_id: int, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
+        """Update a page and return a normalized mutation result."""
         mutation = """
         mutation ($id: Int!, $content: String!, $description: String!, $path: String!, $title: String!, $tags: [String!]) {
           pages {
@@ -160,7 +176,14 @@ class WikiJsClient:
             "title": title,
             "tags": tags or [],
         })
-        return data["pages"]["update"]
+        result = data["pages"]["update"]
+        response = result["responseResult"]
+        return MutationResult(
+            action="updated",
+            succeeded=bool(response.get("succeeded")),
+            message=response.get("message") or "",
+            error_code=response.get("errorCode"),
+        )
 
     def upsert_page(
         self,
@@ -172,38 +195,42 @@ class WikiJsClient:
         tags: list[str] | None = None,
         preserve_description: bool = True,
         preserve_tags: bool = True,
-    ) -> dict[str, Any]:
+    ) -> MutationResult:
+        """Create or update a page while preserving metadata by default on update."""
         existing = self.get_page_by_path(path)
         if existing:
-            resolved_description = existing.get("description", "") if description is None and preserve_description else (description or "")
-            existing_tags = [t.get("tag") for t in existing.get("tags", []) if isinstance(t, dict) and t.get("tag")]
+            resolved_description = existing.description if description is None and preserve_description else (description or "")
+            existing_tags = [t.tag for t in existing.tags if t.tag]
             resolved_tags = existing_tags if tags is None and preserve_tags else (tags or [])
             result = self.update_page(
-                page_id=existing["id"],
+                page_id=existing.id,
                 path=path,
                 title=title,
                 content=content,
                 description=resolved_description,
                 tags=resolved_tags,
             )
-            return {
-                "action": "updated",
-                "metadata": {
+            return MutationResult(
+                action="updated",
+                succeeded=result.succeeded,
+                message=result.message,
+                error_code=result.error_code,
+                page=result.page,
+                metadata={
                     "description_preserved": description is None and preserve_description,
                     "tags_preserved": tags is None and preserve_tags,
                 },
-                **result,
-            }
-        result = self.create_page(
+            )
+        return self.create_page(
             path=path,
             title=title,
             content=content,
             description=description or "",
             tags=tags,
         )
-        return {"action": "created", **result}
 
-    def delete_page_by_path(self, path: str) -> dict[str, Any]:
+    def delete_page_by_path(self, path: str) -> MutationResult:
+        """Delete a page by path and return a normalized mutation result."""
         existing = self.get_page_by_path(path)
         if not existing:
             raise WikiJsError(f"No page found at path: {path}")
@@ -220,5 +247,12 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(mutation, {"id": existing["id"]})
-        return data["pages"]["delete"]
+        data = self._post(mutation, {"id": existing.id})
+        result = data["pages"]["delete"]
+        response = result["responseResult"]
+        return MutationResult(
+            action="deleted",
+            succeeded=bool(response.get("succeeded")),
+            message=response.get("message") or "",
+            error_code=response.get("errorCode"),
+        )

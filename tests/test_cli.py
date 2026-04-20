@@ -4,6 +4,7 @@ import json
 
 from wikijs_graphql_tool import cli
 from wikijs_graphql_tool.client import WikiJsError
+from wikijs_graphql_tool.models import MutationResult, PageDetail, PageSummary
 
 
 class DummyClient:
@@ -12,21 +13,30 @@ class DummyClient:
 
     def list_pages(self):
         return [
-            {"id": 1, "path": "ideas/a", "title": "A", "description": "alpha note"},
-            {"id": 2, "path": "infra/b", "title": "B", "description": "beta infra"},
+            PageSummary(id=1, path="ideas/a", title="A", description="alpha note"),
+            PageSummary(id=2, path="infra/b", title="B", description="beta infra"),
         ]
 
     def get_page_by_path(self, path):
         if path == "ideas/a":
-            return {"id": 1, "path": path, "title": "A", "content": "hello", "description": "", "tags": []}
+            return PageDetail(id=1, path=path, title="A", content="hello", description="", tags=[])
         return None
 
     def upsert_page(self, **kwargs):
-        return {"action": "created", "responseResult": {"succeeded": True}, "page": {"path": kwargs["path"], "title": kwargs["title"]}, "metadata": {"description_preserved": kwargs.get("preserve_description"), "tags_preserved": kwargs.get("preserve_tags")}}
+        return MutationResult(
+            action="created",
+            succeeded=True,
+            message="Page created successfully.",
+            page={"path": kwargs["path"], "title": kwargs["title"]},
+            metadata={
+                "description_preserved": kwargs.get("preserve_description"),
+                "tags_preserved": kwargs.get("preserve_tags"),
+            },
+        )
 
     def delete_page_by_path(self, path):
         self.deleted.append(path)
-        return {"responseResult": {"succeeded": True, "message": "deleted"}}
+        return MutationResult(action="deleted", succeeded=True, message="deleted")
 
 
 def test_cmd_list_filters_prefix(monkeypatch, capsys):

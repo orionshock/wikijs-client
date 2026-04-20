@@ -83,10 +83,13 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 - prefer explicit inputs over magical local conventions
 - return structured results where possible
 - keep it automation-friendly first, interactive second
+- prefer agent/tool usability over decorative human CLI output
+- do not add human-facing niceties that make machine consumption less predictable
 
 ### Intended architecture
 
-- `client.py`: low-level Wiki.js GraphQL operations
+- `client.py`: low-level Wiki.js GraphQL operations with normalized responses
+- `models.py`: small stable dataclasses for page summaries, page detail, tags, and mutation results
 - higher-level operations may later live in a service layer if the client grows
 - `cli.py`: argument parsing and terminal UX only
 - future adapters may expose the same core through MCP or another agent interface
@@ -131,6 +134,13 @@ Failure modes handled explicitly now include:
 - missing `data` payloads
 - missing required env vars
 - file read errors during CLI content loading
+
+## Known limitations
+
+- list output is currently unpaginated
+- list filtering happens client-side after fetching the page list
+- compatibility has been validated against one real Wiki.js environment so far, not a broad matrix of versions
+- mutation results are normalized, but the client still relies on a limited subset of the Wiki.js GraphQL schema
 
 This tool should remain conservative about relying on exotic or version-fragile fields.
 

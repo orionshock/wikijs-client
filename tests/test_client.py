@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from wikijs_graphql_tool.client import WikiJsClient, WikiJsError
+from wikijs_graphql_tool.models import MutationResult, PageDetail, PageTag
 
 
 class DummyResponse:
@@ -43,7 +44,8 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     monkeypatch.setattr(client, "_post", fake_post)
     page = client.get_page_by_path("ideas/homeos")
     assert page is not None
-    assert page["content"] == "body"
+    assert page.content == "body"
+    assert isinstance(page, PageDetail)
     assert len(calls) == 2
     assert calls[1][1] == {"id": 7}
 
@@ -54,42 +56,42 @@ def test_upsert_page_creates_when_missing(monkeypatch):
     monkeypatch.setattr(
         client,
         "create_page",
-        lambda **kwargs: {"responseResult": {"succeeded": True, "message": "Page created successfully.", "errorCode": 0}, "page": {"id": 1, "path": kwargs["path"], "title": kwargs["title"]}},
+        lambda **kwargs: MutationResult(action="created", succeeded=True, message="Page created successfully.", error_code=0, page={"id": 1, "path": kwargs["path"], "title": kwargs["title"]}),
     )
 
     result = client.upsert_page(path="ideas/test", title="Test", content="# Test")
-    assert result["action"] == "created"
-    assert result["responseResult"]["succeeded"] is True
+    assert result.action == "created"
+    assert result.succeeded is True
 
 
 def test_upsert_page_updates_when_existing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "get_page_by_path", lambda path: {"id": 99, "path": path, "title": "Old", "description": "kept", "tags": [{"tag": "ideas", "title": "ideas"}]})
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: PageDetail(id=99, path=path, title="Old", content="old", description="kept", tags=[PageTag(tag="ideas", title="ideas")]))
     captured = {}
 
     def fake_update_page(**kwargs):
         captured.update(kwargs)
-        return {"responseResult": {"succeeded": True, "message": "Page has been updated.", "errorCode": 0}}
+        return MutationResult(action="updated", succeeded=True, message="Page has been updated.", error_code=0)
 
     monkeypatch.setattr(client, "update_page", fake_update_page)
 
     result = client.upsert_page(path="ideas/test", title="Test", content="# Test")
-    assert result["action"] == "updated"
-    assert result["responseResult"]["succeeded"] is True
+    assert result.action == "updated"
+    assert result.succeeded is True
     assert captured["description"] == "kept"
     assert captured["tags"] == ["ideas"]
-    assert result["metadata"]["description_preserved"] is True
-    assert result["metadata"]["tags_preserved"] is True
+    assert result.metadata["description_preserved"] is True
+    assert result.metadata["tags_preserved"] is True
 
 
 def test_upsert_page_can_replace_description_and_tags(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "get_page_by_path", lambda path: {"id": 99, "path": path, "title": "Old", "description": "kept", "tags": [{"tag": "ideas", "title": "ideas"}]})
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: PageDetail(id=99, path=path, title="Old", content="old", description="kept", tags=[PageTag(tag="ideas", title="ideas")]))
     captured = {}
 
     def fake_update_page(**kwargs):
         captured.update(kwargs)
-        return {"responseResult": {"succeeded": True, "message": "Page has been updated.", "errorCode": 0}}
+        return MutationResult(action="updated", succeeded=True, message="Page has been updated.", error_code=0)
 
     monkeypatch.setattr(client, "update_page", fake_update_page)
 
@@ -104,8 +106,8 @@ def test_upsert_page_can_replace_description_and_tags(monkeypatch):
     )
     assert captured["description"] == "new desc"
     assert captured["tags"] == ["new", "tags"]
-    assert result["metadata"]["description_preserved"] is False
-    assert result["metadata"]["tags_preserved"] is False
+    assert result.metadata["description_preserved"] is False
+    assert result.metadata["tags_preserved"] is False
 
 
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
