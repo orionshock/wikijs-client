@@ -27,6 +27,7 @@ Early prototype, already validated against a live Wiki.js instance for read and 
 - `get`
 - `list`
 - `upsert`
+- `move`
 - `delete`
 
 ## Usage examples
@@ -41,6 +42,7 @@ wikijs-tool list --regex '^ideas/'
 wikijs-tool get ideas/homeos
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
+wikijs-tool move ideas/scratch ideas/reference --title 'Reference Page'
 wikijs-tool delete ideas/scratch
 ```
 

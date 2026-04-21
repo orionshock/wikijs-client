@@ -229,6 +229,31 @@ class WikiJsClient:
             tags=tags,
         )
 
+    def move_page(self, *, source_path: str, destination_path: str, title: str | None = None) -> MutationResult:
+        """Move or rename a page by updating its path and optionally its title."""
+        existing = self.get_page_by_path(source_path)
+        if not existing:
+            raise WikiJsError(f"No page found at path: {source_path}")
+        destination_existing = self.get_page_by_path(destination_path)
+        if destination_existing and destination_existing.id != existing.id:
+            raise WikiJsError(f"Destination path already exists: {destination_path}")
+        result = self.update_page(
+            page_id=existing.id,
+            path=destination_path,
+            title=title or existing.title,
+            content=existing.content,
+            description=existing.description,
+            tags=[t.tag for t in existing.tags if t.tag],
+        )
+        return MutationResult(
+            action="moved",
+            succeeded=result.succeeded,
+            message=result.message,
+            error_code=result.error_code,
+            page={"id": existing.id, "path": destination_path, "title": title or existing.title},
+            metadata={"source_path": source_path, "destination_path": destination_path},
+        )
+
     def delete_page_by_path(self, path: str) -> MutationResult:
         """Delete a page by path and return a normalized mutation result."""
         existing = self.get_page_by_path(path)

@@ -10,6 +10,7 @@ from wikijs_graphql_tool.models import MutationResult, PageDetail, PageSummary
 class DummyClient:
     def __init__(self):
         self.deleted = []
+        self.moved = []
 
     def list_pages(self):
         return [
@@ -37,6 +38,10 @@ class DummyClient:
     def delete_page_by_path(self, path):
         self.deleted.append(path)
         return MutationResult(action="deleted", succeeded=True, message="deleted")
+
+    def move_page(self, *, source_path, destination_path, title=None):
+        self.moved.append((source_path, destination_path, title))
+        return MutationResult(action="moved", succeeded=True, message="Page has been updated.", page={"path": destination_path, "title": title or "A"})
 
 
 def test_cmd_list_filters_prefix(monkeypatch, capsys):
@@ -105,6 +110,16 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
     assert "created: ideas/test" in out
     assert "description preserved" in out
     assert "tags preserved" in out
+
+
+def test_cmd_move(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title=None, json=True)
+    assert cli.cmd_move(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "moved"
+    assert client.moved == [("ideas/a", "ideas/b", None)]
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):

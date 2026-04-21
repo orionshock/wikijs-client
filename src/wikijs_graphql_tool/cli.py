@@ -120,6 +120,17 @@ def cmd_delete(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_move(args: argparse.Namespace) -> int:
+    client = build_client()
+    result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
+    if args.json:
+        emit(result.to_dict(), as_json=True)
+    else:
+        response = result.to_dict().get("responseResult", {})
+        print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wikijs-tool")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -151,6 +162,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_delete.add_argument("path")
     p_delete.add_argument("--json", action="store_true")
     p_delete.set_defaults(func=cmd_delete)
+
+    p_move = sub.add_parser("move")
+    p_move.add_argument("source_path")
+    p_move.add_argument("destination_path")
+    p_move.add_argument("--title", help="optional new title; defaults to the existing title")
+    p_move.add_argument("--json", action="store_true")
+    p_move.set_defaults(func=cmd_move)
     return parser
 
 

@@ -110,6 +110,45 @@ def test_upsert_page_can_replace_description_and_tags(monkeypatch):
     assert result.metadata["tags_preserved"] is False
 
 
+def test_move_page_updates_path_and_preserves_existing_content(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "get_page_by_path",
+        lambda path: PageDetail(id=42, path="ideas/old", title="Old Title", content="body", description="desc", tags=[PageTag(tag="notes", title="notes")]) if path == "ideas/old" else None,
+    )
+    captured = {}
+
+    def fake_update_page(**kwargs):
+        captured.update(kwargs)
+        return MutationResult(action="updated", succeeded=True, message="Page has been updated.", error_code=0)
+
+    monkeypatch.setattr(client, "update_page", fake_update_page)
+    result = client.move_page(source_path="ideas/old", destination_path="ideas/new")
+    assert result.action == "moved"
+    assert captured["page_id"] == 42
+    assert captured["path"] == "ideas/new"
+    assert captured["title"] == "Old Title"
+    assert captured["content"] == "body"
+    assert captured["description"] == "desc"
+    assert captured["tags"] == ["notes"]
+
+
+def test_move_page_raises_when_destination_exists(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_get(path):
+        if path == "ideas/old":
+            return PageDetail(id=42, path="ideas/old", title="Old Title", content="body", description="desc", tags=[])
+        if path == "ideas/new":
+            return PageDetail(id=99, path="ideas/new", title="New Title", content="body", description="desc", tags=[])
+        return None
+
+    monkeypatch.setattr(client, "get_page_by_path", fake_get)
+    with pytest.raises(WikiJsError, match="Destination path already exists"):
+        client.move_page(source_path="ideas/old", destination_path="ideas/new")
+
+
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
