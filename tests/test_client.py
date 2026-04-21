@@ -149,6 +149,48 @@ def test_move_page_raises_when_destination_exists(monkeypatch):
         client.move_page(source_path="ideas/old", destination_path="ideas/new")
 
 
+def test_move_page_rejects_same_source_and_destination(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: PageDetail(id=42, path="ideas/old", title="Old Title", content="body", description="desc", tags=[]))
+    with pytest.raises(WikiJsError, match="source and destination paths are the same"):
+        client.move_page(source_path=" ideas/old ", destination_path="/ideas/old/")
+
+
+def test_create_page_rejects_empty_title():
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    with pytest.raises(WikiJsError, match="title must not be empty"):
+        client.create_page(path="ideas/test", title="   ", content="# Test")
+
+
+def test_create_page_rejects_zero_width_space_in_path():
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    with pytest.raises(WikiJsError, match=r"unsupported invisible character U\+200B"):
+        client.create_page(path="ideas/\u200btest", title="Test", content="# Test")
+
+
+def test_create_page_rejects_format_characters_in_title():
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    with pytest.raises(WikiJsError, match=r"unsupported formatting character U\+2060"):
+        client.create_page(path="ideas/test", title="Test\u2060Title", content="# Test")
+
+
+def test_create_page_allows_non_strict_description_formatting_chars():
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    captured = {}
+
+    def fake_post(query, variables=None):
+        captured.update(variables or {})
+        return {"pages": {"create": {"responseResult": {"succeeded": True, "message": "ok", "errorCode": 0}, "page": {"id": 1, "path": "ideas/test", "title": "Test"}}}}
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(client, "_post", fake_post)
+    try:
+        client.create_page(path="ideas/test", title="Test", content="# Test", description="desc\u2060ok")
+    finally:
+        monkeypatch.undo()
+    assert captured["description"] == "desc\u2060ok"
+
+
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
@@ -159,6 +201,26 @@ def test_delete_page_by_path_raises_when_missing(monkeypatch):
         assert "No page found" in str(exc)
     else:
         raise AssertionError("Expected WikiJsError")
+
+
+def test_delete_page_normalizes_path(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    seen = {}
+
+    def fake_get(path):
+        seen["path"] = path
+        return None
+
+    monkeypatch.setattr(client, "get_page_by_path", fake_get)
+    with pytest.raises(WikiJsError, match="No page found"):
+        client.delete_page_by_path(" /ideas/missing/ ")
+    assert seen["path"] == "ideas/missing"
+
+
+def test_update_page_rejects_zero_width_tag(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    with pytest.raises(WikiJsError, match=r"unsupported invisible character U\+200B"):
+        client.update_page(page_id=1, path="ideas/test", title="Test", content="# Test", tags=["good", "\u200bbad"])
 
 
 def test_post_wraps_request_exception(monkeypatch):

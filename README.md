@@ -30,6 +30,13 @@ Early prototype, already validated against a live Wiki.js instance for read and 
 - `move`
 - `delete`
 
+`move` and `delete` support `--dry-run` for agent/script planning without mutating the wiki.
+
+Input normalization is intentionally lightweight:
+- paths, titles, and tags are trimmed and validated more strictly because they are likely to become URLs, identifiers, or stable keys
+- descriptions are validated more gently because they are human-facing text
+- tags are sanitized for structural safety only, not semantic correctness
+
 ## Usage examples
 
 ```bash
@@ -43,6 +50,8 @@ wikijs-tool get ideas/homeos
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
 wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
 wikijs-tool move ideas/scratch ideas/reference --title 'Reference Page'
+wikijs-tool move ideas/scratch ideas/reference --dry-run
+wikijs-tool delete ideas/scratch --dry-run
 wikijs-tool delete ideas/scratch
 ```
 

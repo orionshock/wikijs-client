@@ -93,11 +93,22 @@ def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
 def test_cmd_delete(monkeypatch, capsys):
     client = DummyClient()
     monkeypatch.setattr(cli, "build_client", lambda: client)
-    args = cli.argparse.Namespace(path="ideas/test", json=True)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, json=True)
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["responseResult"]["succeeded"] is True
     assert client.deleted == ["ideas/test"]
+
+
+def test_cmd_delete_dry_run(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=True, json=True)
+    assert cli.cmd_delete(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "delete"
+    assert out["dry_run"] is True
+    assert client.deleted == []
 
 
 def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
@@ -115,11 +126,23 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
 def test_cmd_move(monkeypatch, capsys):
     client = DummyClient()
     monkeypatch.setattr(cli, "build_client", lambda: client)
-    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title=None, json=True)
+    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title=None, dry_run=False, json=True)
     assert cli.cmd_move(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "moved"
     assert client.moved == [("ideas/a", "ideas/b", None)]
+
+
+def test_cmd_move_dry_run(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title="B", dry_run=True, json=True)
+    assert cli.cmd_move(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "move"
+    assert out["dry_run"] is True
+    assert out["title"] == "B"
+    assert client.moved == []
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):

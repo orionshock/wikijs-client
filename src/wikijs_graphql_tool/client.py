@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,62 @@ from .models import MutationResult, PageDetail, PageSummary
 
 class WikiJsError(RuntimeError):
     """Raised when the Wiki.js API returns an unusable or failed response."""
+
+
+KNOWN_BAD_INVISIBLES = {
+    "\ufeff",
+    "\u200b",
+}
+
+
+def _reject_unsupported_chars(value: str, field_name: str, *, strict: bool = False) -> str:
+    for ch in value:
+        category = unicodedata.category(ch)
+        codepoint = f"U+{ord(ch):04X}"
+        if category == "Cc" and ch not in "\t\n\r":
+            raise WikiJsError(f"{field_name} contains unsupported control character {codepoint}")
+        if ch == "\x7f" or category == "Cs":
+            raise WikiJsError(f"{field_name} contains unsupported control character {codepoint}")
+        if ch in KNOWN_BAD_INVISIBLES:
+            raise WikiJsError(f"{field_name} contains unsupported invisible character {codepoint}")
+        if strict and category == "Cf":
+            raise WikiJsError(f"{field_name} contains unsupported formatting character {codepoint}")
+    return value
+
+
+def _normalize_path(path: str) -> str:
+    path = _reject_unsupported_chars(path.strip(), "path", strict=True)
+    if not path:
+        raise WikiJsError("path must not be empty")
+    path = path.strip("/")
+    path = "/".join(part.strip() for part in path.split("/") if part.strip())
+    if not path:
+        raise WikiJsError("path must not be empty")
+    return path
+
+
+def _normalize_title(title: str) -> str:
+    title = _reject_unsupported_chars(title.strip(), "title", strict=True)
+    if not title:
+        raise WikiJsError("title must not be empty")
+    return title
+
+
+def _normalize_description(description: str | None) -> str:
+    if description is None:
+        return ""
+    return _reject_unsupported_chars(description.strip(), "description", strict=False)
+
+
+def _normalize_tags(tags: list[str] | None) -> list[str]:
+    if tags is None:
+        return []
+    normalized = []
+    for tag in tags:
+        clean = _reject_unsupported_chars(tag.strip(), "tag", strict=True)
+        if clean:
+            normalized.append(clean)
+    return normalized
 
 
 @dataclass
@@ -97,6 +154,10 @@ class WikiJsClient:
 
     def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
         """Create a page and return a normalized mutation result."""
+        path = _normalize_path(path)
+        title = _normalize_title(title)
+        description = _normalize_description(description)
+        tags = _normalize_tags(tags)
         mutation = """
         mutation ($content: String!, $description: String!, $path: String!, $title: String!, $tags: [String!]!) {
           pages {
@@ -130,7 +191,7 @@ class WikiJsClient:
             "description": description,
             "path": path,
             "title": title,
-            "tags": tags or [],
+            "tags": tags,
         })
         result = data["pages"]["create"]
         response = result["responseResult"]
@@ -144,6 +205,10 @@ class WikiJsClient:
 
     def update_page(self, *, page_id: int, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
         """Update a page and return a normalized mutation result."""
+        path = _normalize_path(path)
+        title = _normalize_title(title)
+        description = _normalize_description(description)
+        tags = _normalize_tags(tags)
         mutation = """
         mutation ($id: Int!, $content: String!, $description: String!, $path: String!, $title: String!, $tags: [String!]) {
           pages {
@@ -174,7 +239,7 @@ class WikiJsClient:
             "description": description,
             "path": path,
             "title": title,
-            "tags": tags or [],
+            "tags": tags,
         })
         result = data["pages"]["update"]
         response = result["responseResult"]
@@ -197,6 +262,8 @@ class WikiJsClient:
         preserve_tags: bool = True,
     ) -> MutationResult:
         """Create or update a page while preserving metadata by default on update."""
+        path = _normalize_path(path)
+        title = _normalize_title(title)
         existing = self.get_page_by_path(path)
         if existing:
             resolved_description = existing.description if description is None and preserve_description else (description or "")
@@ -231,16 +298,20 @@ class WikiJsClient:
 
     def move_page(self, *, source_path: str, destination_path: str, title: str | None = None) -> MutationResult:
         """Move or rename a page by updating its path and optionally its title."""
+        source_path = _normalize_path(source_path)
+        destination_path = _normalize_path(destination_path)
         existing = self.get_page_by_path(source_path)
         if not existing:
             raise WikiJsError(f"No page found at path: {source_path}")
+        if source_path == destination_path and title is None:
+            raise WikiJsError("source and destination paths are the same")
         destination_existing = self.get_page_by_path(destination_path)
         if destination_existing and destination_existing.id != existing.id:
             raise WikiJsError(f"Destination path already exists: {destination_path}")
         result = self.update_page(
             page_id=existing.id,
             path=destination_path,
-            title=title or existing.title,
+            title=_normalize_title(title) if title is not None else existing.title,
             content=existing.content,
             description=existing.description,
             tags=[t.tag for t in existing.tags if t.tag],
@@ -256,6 +327,7 @@ class WikiJsClient:
 
     def delete_page_by_path(self, path: str) -> MutationResult:
         """Delete a page by path and return a normalized mutation result."""
+        path = _normalize_path(path)
         existing = self.get_page_by_path(path)
         if not existing:
             raise WikiJsError(f"No page found at path: {path}")

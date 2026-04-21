@@ -111,6 +111,17 @@ def cmd_upsert(args: argparse.Namespace) -> int:
 
 def cmd_delete(args: argparse.Namespace) -> int:
     client = build_client()
+    if args.dry_run:
+        payload = {
+            "action": "delete",
+            "dry_run": True,
+            "path": args.path,
+        }
+        if args.json:
+            emit(payload, as_json=True)
+        else:
+            print(f"dry-run: delete {args.path}")
+        return 0
     result = client.delete_page_by_path(args.path)
     if args.json:
         emit(result.to_dict(), as_json=True)
@@ -122,6 +133,20 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 def cmd_move(args: argparse.Namespace) -> int:
     client = build_client()
+    if args.dry_run:
+        payload = {
+            "action": "move",
+            "dry_run": True,
+            "source_path": args.source_path,
+            "destination_path": args.destination_path,
+            "title": args.title,
+        }
+        if args.json:
+            emit(payload, as_json=True)
+        else:
+            title_note = f" with title {args.title!r}" if args.title else ""
+            print(f"dry-run: move {args.source_path} -> {args.destination_path}{title_note}")
+        return 0
     result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
     if args.json:
         emit(result.to_dict(), as_json=True)
@@ -160,6 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_delete = sub.add_parser("delete")
     p_delete.add_argument("path")
+    p_delete.add_argument("--dry-run", action="store_true")
     p_delete.add_argument("--json", action="store_true")
     p_delete.set_defaults(func=cmd_delete)
 
@@ -167,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_move.add_argument("source_path")
     p_move.add_argument("destination_path")
     p_move.add_argument("--title", help="optional new title; defaults to the existing title")
+    p_move.add_argument("--dry-run", action="store_true")
     p_move.add_argument("--json", action="store_true")
     p_move.set_defaults(func=cmd_move)
     return parser
