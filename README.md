@@ -69,22 +69,22 @@ Input normalization is intentionally lightweight:
 export WIKIJS_URL='https://example.com/graphql'
 export WIKIJS_TOKEN='your-token'
 
-wikijs-client exists ideas/homeos
-wikijs-client exists infrastructure/newcaprica/docker-caddy --json
-wikijs-client search newcaprica
-wikijs-client search openclaw --json
+wikijs-client exists docs/getting-started
+wikijs-client exists infrastructure/reverse-proxy/caddy --json
+wikijs-client search reverse-proxy
+wikijs-client search auth --json
 wikijs-client list
-wikijs-client list --prefix ideas
-wikijs-client list --prefix infrastructure/newcaprica
-wikijs-client list --query homeos
-wikijs-client list --regex '^ideas/'
-wikijs-client get ideas/homeos
-wikijs-client upsert ideas/scratch 'Scratch Page' --file scratch.md
-wikijs-client upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
-wikijs-client move ideas/scratch ideas/reference --title 'Reference Page'
-wikijs-client move ideas/scratch ideas/reference --dry-run
-wikijs-client delete ideas/scratch --dry-run
-wikijs-client delete ideas/scratch
+wikijs-client list --prefix docs
+wikijs-client list --prefix infrastructure/reverse-proxy
+wikijs-client list --query onboarding
+wikijs-client list --regex '^docs/'
+wikijs-client get docs/getting-started
+wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md
+wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
+wikijs-client move docs/scratch docs/reference --title 'Reference Page'
+wikijs-client move docs/scratch docs/reference --dry-run
+wikijs-client delete docs/scratch --dry-run
+wikijs-client delete docs/scratch
 ```
 
 Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.
@@ -193,15 +193,15 @@ from wikijs_client import WikiJsClient
 
 client = WikiJsClient(url="https://example.com/graphql", token="secret-token")
 
-if client.get_page_by_path("ideas/homeos") is None:
+if client.get_page_by_path("docs/getting-started") is None:
     result = client.create_page(
-        path="ideas/homeos",
-        title="HomeOS",
-        content="# HomeOS\n",
+        path="docs/getting-started",
+        title="Getting Started",
+        content="# Getting Started\n",
     )
     print(result.to_dict())
 
-for page in client.search_pages(query="newcaprica"):
+for page in client.search_pages(query="reverse proxy"):
     print(page.path, page.title)
 ```
 
@@ -230,65 +230,64 @@ This project should stay **agnostic** to any one personal wiki layout or home-la
 
 ### Roadmap
 
-#### Milestone 1, solid core CLI and library spine
+#### Completed foundation
 
-Goal: make the current read/list/upsert/delete tool feel dependable as a small reusable core.
+Already in place:
 
-Desirable work:
+- core CLI commands for `exists`, `search`, `get`, `list`, `upsert`, `move`, and `delete`
+- normalized result models (`PageSummary`, `PageDetail`, `PageTag`, `MutationResult`)
+- explicit separation between client transport, model objects, and CLI presentation
+- stable top-level Python API exports with basic tests locking the public surface
+- exact path lookup using targeted `pages.search(...)` plus exact client-side filtering
+- basic mutation safety around metadata preservation and dry-run support for move/delete
+- README coverage for command semantics, Python API shape, and compatibility assumptions
+- test coverage for core client behavior, CLI flows, and exported public API
 
-- add more failure-path and compatibility tests
-- tighten docstrings and internal API expectations around normalized models
-- make sure CLI JSON output stays stable and predictable for agent/tool callers
-- document compatibility assumptions with Wiki.js versions and schema expectations
-- keep transport, model, and CLI responsibilities clearly separated
+#### Next milestone, retrieval ergonomics and compatibility hardening
 
-#### Milestone 2, stronger retrieval and query ergonomics
+Goal: improve discovery and compatibility without blurring command semantics.
 
-Goal: improve how agents and scripts discover pages without turning the tool into a fuzzy magic layer.
-
-Desirable work:
+Likely work:
 
 - add pagination controls for large wikis
 - add explicit sorting controls where the API supports them cleanly
-- consider exact-match and title/path helper queries if they can remain predictable
-- consider a search-oriented command that stays schema-conservative and machine-friendly
-- make large result sets easier to consume without prioritizing decorative terminal output
+- evaluate whether exact-match or title/path helper queries can improve compatibility across more Wiki.js deployments
+- decide whether a list-based fallback for exact path lookup is worth keeping for compatibility
+- decide whether search locale should remain hardcoded to `en` or become configurable
 
-#### Milestone 3, safer mutation workflows
+#### Next milestone, richer mutation contracts
 
-Goal: make writes more trustworthy and easier for agents to reason about.
+Goal: make writes easier for scripts and agents to reason about.
 
-Desirable work:
+Likely work:
 
 - expand mutation result data so callers can reliably inspect what changed
-- consider dry-run or validate-style flows where feasible
-- consider clearer conflict/error reporting for missing pages, duplicate paths, or schema surprises
-- add tests around metadata preservation and replacement edge cases
-- document write semantics carefully so omission vs replacement stays explicit
+- consider validate-style or preview flows where feasible
+- improve conflict and schema-surprise reporting for missing pages, duplicate paths, or incompatible deployments
+- add more tests around metadata preservation and replacement edge cases
 
-#### Milestone 4, packaging for broader reuse
+#### Next milestone, packaging and release discipline
 
-Goal: keep the core implementation ready for use beyond one local CLI.
+Goal: keep the core implementation ready for broader reuse.
 
-Desirable work:
+Likely work:
 
 - harden the package layout for publishing to PyPI if desired
 - consider a single-file packaged executable for simple ops workflows
+- add lightweight versioning and release discipline once the API shape settles
 - keep the core library interface stable enough to back an MCP wrapper later
-- avoid interface decisions that would force a rewrite for agent-facing adapters
-- add a small versioning/release discipline once the API shape settles
 
-#### Milestone 5, agent-first interface layer
+#### Next milestone, agent-facing adapters
 
 Goal: support AI agent usage directly without compromising the clean core.
 
-Desirable work:
+Likely work:
 
 - design an MCP or similar adapter around the existing library instead of embedding agent logic into the CLI
 - expose stable structured responses with minimal transformation
 - keep auth/config simple and explicit for headless environments
 - decide which operations are safe enough to expose by default in agent runtimes
-- add example agent integration docs once the core contract feels stable
+- add integration examples once the core contract feels stable
 
 ### Possible future forms
 
@@ -305,7 +304,7 @@ The code should be written so those are packaging/interface decisions, not rewri
 
 Current validation target:
 
-- Wiki.js GraphQL endpoint from Orion's local Wiki.js service
+- a live Wiki.js GraphQL endpoint used during development
 - page lifecycle tested live for create, update, read, and delete
 
 Current assumptions:
