@@ -72,7 +72,20 @@ def _normalize_tags(tags: list[str] | None) -> list[str]:
 
 @dataclass
 class WikiJsClient:
-    """Minimal Wiki.js GraphQL client focused on practical page operations."""
+    """Minimal Wiki.js GraphQL client focused on practical page operations.
+
+    Public methods are intended to be reusable by scripts, tools, and future adapters:
+    - list_pages()
+    - search_pages(query, path="")
+    - get_page_by_path(path)
+    - create_page(...)
+    - update_page(...)
+    - upsert_page(...)
+    - move_page(...)
+    - delete_page_by_path(path)
+
+    Private helpers prefixed with `_` are internal and should not be treated as stable API.
+    """
 
     url: str
     token: str
@@ -110,7 +123,11 @@ class WikiJsClient:
         return data
 
     def list_pages(self) -> list[PageSummary]:
-        """Return page summaries suitable for listing and simple lookups."""
+        """Return all pages as normalized PageSummary objects.
+
+        This is the stable browse/inventory method. It maps to Wiki.js `pages.list()`
+        and is best for broad listing plus client-side filtering.
+        """
         query = """
         query {
           pages {
@@ -137,7 +154,21 @@ class WikiJsClient:
         return exact_matches[0]
 
     def search_pages(self, *, query: str, path: str = "") -> list[PageSummary]:
-        """Search pages using Wiki.js search results, optionally scoped by path input."""
+        """Search pages and return normalized PageSummary results.
+
+        Args:
+            query: Text to send to Wiki.js search.
+            path: Optional path input passed through to Wiki.js search. An empty
+                string performs global search on the current tested Wiki.js setup.
+
+        Returns:
+            A list of PageSummary results in server-returned order.
+
+        Notes:
+            Search behavior and ranking come from the Wiki.js server. Callers should
+            not assume subtree semantics from `path` unless they have validated that
+            behavior on their target Wiki.js instance.
+        """
         query_text = _reject_unsupported_chars(query.strip(), "query", strict=False)
         path_value = _normalize_path(path) if path.strip() else ""
         gql = """
@@ -179,7 +210,12 @@ class WikiJsClient:
         return PageDetail.from_api(data["pages"]["single"])
 
     def get_page_by_path(self, path: str) -> PageDetail | None:
-        """Return a detailed page object by path, or None if it does not exist."""
+        """Return a detailed page by exact path, or None if it does not exist.
+
+        The path is normalized before lookup. Exact lookup currently prefers a
+        targeted `pages.search(...)` pass plus exact client-side filtering, followed
+        by `pages.single(id: ...)` for the full page payload.
+        """
         path = _normalize_path(path)
         match = self._find_page_summary_by_path_via_search(path)
         if match is None:
@@ -187,7 +223,10 @@ class WikiJsClient:
         return self._get_page_by_id(match.id)
 
     def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
-        """Create a page and return a normalized mutation result."""
+        """Create a page and return a normalized MutationResult.
+
+        Inputs are normalized before the GraphQL mutation is sent.
+        """
         path = _normalize_path(path)
         title = _normalize_title(title)
         description = _normalize_description(description)
@@ -238,7 +277,7 @@ class WikiJsClient:
         )
 
     def update_page(self, *, page_id: int, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
-        """Update a page and return a normalized mutation result."""
+        """Update a page by id and return a normalized MutationResult."""
         path = _normalize_path(path)
         title = _normalize_title(title)
         description = _normalize_description(description)
@@ -295,7 +334,11 @@ class WikiJsClient:
         preserve_description: bool = True,
         preserve_tags: bool = True,
     ) -> MutationResult:
-        """Create or update a page while preserving metadata by default on update."""
+        """Create or update a page while preserving metadata by default on update.
+
+        When updating an existing page, description and tags are preserved unless
+        explicit replacement values are provided or preservation is disabled.
+        """
         path = _normalize_path(path)
         title = _normalize_title(title)
         existing = self.get_page_by_path(path)
@@ -360,7 +403,7 @@ class WikiJsClient:
         )
 
     def delete_page_by_path(self, path: str) -> MutationResult:
-        """Delete a page by path and return a normalized mutation result."""
+        """Delete a page by exact path and return a normalized MutationResult."""
         path = _normalize_path(path)
         existing = self.get_page_by_path(path)
         if not existing:

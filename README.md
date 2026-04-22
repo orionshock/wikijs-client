@@ -118,6 +118,93 @@ Environment variables:
 - `WIKIJS_URL`
 - `WIKIJS_TOKEN`
 
+## Public Python API
+
+The Python-side architecture is intentionally split three ways:
+
+- `client.py`
+  - transport and normalized Wiki.js operations
+  - public exports from that module should effectively be just `WikiJsClient` and `WikiJsError`
+  - returns structured Python model objects rather than printing or formatting output
+
+- `models.py`
+  - small stable data contracts for normalized results
+  - owns `PageSummary`, `PageDetail`, `PageTag`, and `MutationResult`
+
+- `cli.py`
+  - all command-line parsing, human output, JSON stdout rendering, and exit-code behavior
+  - should not contain raw GraphQL or normalization logic that belongs in the client
+
+The package top level re-exports the supported library surface for convenience:
+
+```python
+from wikijs_client import (
+    WikiJsClient,
+    WikiJsError,
+    PageSummary,
+    PageDetail,
+    PageTag,
+    MutationResult,
+)
+```
+
+Supported public client methods:
+
+- `list_pages() -> list[PageSummary]`
+- `search_pages(query: str, path: str = "") -> list[PageSummary]`
+- `get_page_by_path(path: str) -> PageDetail | None`
+- `create_page(...) -> MutationResult`
+- `update_page(...) -> MutationResult`
+- `upsert_page(...) -> MutationResult`
+- `move_page(...) -> MutationResult`
+- `delete_page_by_path(path: str) -> MutationResult`
+
+Return-model expectations:
+
+- `PageSummary`
+  - stable compact page metadata for list/search results
+  - fields: `id`, `path`, `title`, `description`
+
+- `PageDetail`
+  - detailed page payload for direct reads
+  - fields: `id`, `path`, `title`, `content`, `description`, `tags`
+
+- `PageTag`
+  - normalized page tag
+  - fields: `tag`, `title`
+
+- `MutationResult`
+  - normalized mutation result payload
+  - fields: `action`, `succeeded`, `message`, `error_code`, optional `page`, optional `metadata`
+  - `.to_dict()` keeps the response shape stable for scripts and tools
+
+Stability notes:
+
+- top-level imports listed above are intended to be the supported public package surface
+- inside `client.py`, callers should treat `WikiJsClient` and `WikiJsError` as the only intended public module-level exports
+- `WikiJsClient` public methods without a leading underscore are the intended reusable client API
+- helper functions and methods prefixed with `_` are internal and may change without notice
+- CLI behavior may evolve separately from the Python API as long as the core client contract stays clean
+
+Example:
+
+```python
+from wikijs_client import WikiJsClient
+
+client = WikiJsClient(url="https://example.com/graphql", token="secret-token")
+
+if client.get_page_by_path("ideas/homeos") is None:
+    result = client.create_page(
+        path="ideas/homeos",
+        title="HomeOS",
+        content="# HomeOS\n",
+    )
+    print(result.to_dict())
+
+for page in client.search_pages(query="newcaprica"):
+    print(page.path, page.title)
+```
+
 ## Development direction
 
 This project should stay **agnostic** to any one personal wiki layout or home-lab setup.
