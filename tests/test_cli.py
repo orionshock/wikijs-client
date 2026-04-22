@@ -18,6 +18,12 @@ class DummyClient:
             PageSummary(id=2, path="infra/b", title="B", description="beta infra"),
         ]
 
+    def search_pages(self, *, query, path=""):
+        assert path == ""
+        if query == "alpha":
+            return [PageSummary(id=1, path="ideas/a", title="A", description="alpha note")]
+        return []
+
     def get_page_by_path(self, path):
         if path == "ideas/a":
             return PageDetail(id=1, path=path, title="A", content="hello", description="", tags=[])
@@ -70,6 +76,31 @@ def test_cmd_list_filters_regex(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "ideas/a" in out
     assert "infra/b" not in out
+
+
+def test_cmd_search_json(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(text="alpha", json=True)
+    assert cli.cmd_search(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out[0]["path"] == "ideas/a"
+
+
+def test_cmd_exists_json_found(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(path="ideas/a", json=True)
+    assert cli.cmd_exists(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["path"] == "ideas/a"
+    assert out["exists"] is True
+
+
+def test_cmd_exists_json_missing(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(path="ideas/missing", json=True)
+    assert cli.cmd_exists(args) == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["exists"] is False
 
 
 def test_cmd_get_json(monkeypatch, capsys):
@@ -143,6 +174,13 @@ def test_cmd_move_dry_run(monkeypatch, capsys):
     assert out["dry_run"] is True
     assert out["title"] == "B"
     assert client.moved == []
+
+
+def test_build_parser_includes_new_commands():
+    parser = cli.build_parser()
+    help_text = parser.format_help()
+    assert "search" in help_text
+    assert "exists" in help_text
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):

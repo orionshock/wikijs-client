@@ -24,11 +24,37 @@ Early prototype, already validated against a live Wiki.js instance for read and 
 
 ## Current commands
 
+- `exists`
+- `search`
 - `get`
 - `list`
 - `upsert`
 - `move`
 - `delete`
+
+## Command semantics
+
+The CLI now has an intentional split between three read/discovery modes:
+
+- `exists PATH`
+  - exact path presence check
+  - best for scripts, agents, preflight checks, and conditional flows
+  - exits non-zero when the page is missing
+
+- `search TEXT`
+  - global text search backed by Wiki.js `pages.search(path="", query=TEXT)`
+  - best for discovery when you know a word, phrase, host, service, or concept but not the exact page path
+  - returns ranked search results from the server rather than a full wiki listing
+
+- `list`
+  - predictable browse command backed by `pages.list()`
+  - best for subtree browsing, broad inventories, and client-side filtering
+  - supports `--prefix`, `--query`, and `--regex`
+
+This split is deliberate:
+- exact existence checks should not require listing the entire wiki
+- global text search should use the server's search behavior when available
+- subtree browsing should stay predictable even if Wiki.js search behavior changes
 
 `move` and `delete` support `--dry-run` for agent/script planning without mutating the wiki.
 
@@ -43,7 +69,13 @@ Input normalization is intentionally lightweight:
 export WIKIJS_URL='https://example.com/graphql'
 export WIKIJS_TOKEN='your-token'
 
+wikijs-client exists ideas/homeos
+wikijs-client exists infrastructure/newcaprica/docker-caddy --json
+wikijs-client search newcaprica
+wikijs-client search openclaw --json
+wikijs-client list
 wikijs-client list --prefix ideas
+wikijs-client list --prefix infrastructure/newcaprica
 wikijs-client list --query homeos
 wikijs-client list --regex '^ideas/'
 wikijs-client get ideas/homeos
@@ -56,6 +88,10 @@ wikijs-client delete ideas/scratch
 ```
 
 Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.
+
+`exists` now performs exact path presence checks and exits non-zero when a page is missing.
+
+`search` performs global text search through `pages.search(path="", query=TEXT)` and renders the returned results as a compact table by default.
 
 `list` now renders a compact table by default, and can filter by:
 
@@ -187,7 +223,7 @@ Current validation target:
 
 Current assumptions:
 
-- standard Wiki.js GraphQL `pages.list`, `pages.single`, `pages.create`, `pages.update`, and `pages.delete`
+- standard Wiki.js GraphQL `pages.list`, `pages.search`, `pages.single`, `pages.create`, `pages.update`, and `pages.delete`
 - `pages.single` exposes `description` and `tags { tag title }`
 - token-based API auth via `Authorization: Bearer ...`
 - markdown editor mode
@@ -198,6 +234,7 @@ Failure modes handled explicitly now include:
 - non-JSON API responses
 - GraphQL error payloads
 - missing `data` payloads
+- ambiguous exact path matches during targeted search lookup
 - missing required env vars
 - file read errors during CLI content loading
 
@@ -205,6 +242,8 @@ Failure modes handled explicitly now include:
 
 - list output is currently unpaginated
 - list filtering happens client-side after fetching the page list
+- global text search depends on the current behavior and ranking of `pages.search(...)`
+- exact path lookup now prefers `pages.search(...)` plus exact client-side path filtering, so it still depends on current Wiki.js search behavior and schema stability
 - compatibility has been validated against one real Wiki.js environment so far, not a broad matrix of versions
 - mutation results are normalized, but the client still relies on a limited subset of the Wiki.js GraphQL schema
 

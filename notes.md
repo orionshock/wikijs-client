@@ -57,9 +57,9 @@ Observed result shape:
 
 Interpretation so far:
 - `query: ""` seems to disable text search and leave path-focused narrowing in place
-- `path` behaves like a prefix/focus, not guaranteed strict equality
-- exact match still needs to be enforced client-side via `result.path == target_path`
-- in practical testing, the search behavior appears to become effectively strict if enough of the path is provided, but the tool should not assume that without explicit client-side filtering
+- in current live probing against Orion's wiki, `path` behaved more strictly than expected and returned results only for exact-looking paths, not loose prefixes or slash variants
+- the client should still enforce exact match via `result.path == target_path` instead of trusting that behavior long-term
+- exact-match filtering remains the safer contract even if the current server behavior is already effectively exact
 
 ## Reasonable next-step design
 
@@ -74,10 +74,10 @@ This would likely be cheaper and cleaner than full `pages.list()` for normal loo
 
 ## TODO
 
-- [ ] Verify search result behavior for near-prefix collisions
-- [ ] Verify behavior for nonexistent paths
+- [x] Verify search result behavior for near-prefix collisions
+- [x] Verify behavior for nonexistent paths
 - [ ] Verify whether locale should remain hardcoded to `en` or become configurable
-- [ ] Implement a targeted path lookup helper using `pages.search(...)`
+- [x] Implement a targeted path lookup helper using `pages.search(...)`
 - [ ] Keep current `pages.list()` path-scan as fallback only if needed for compatibility
-- [ ] Add tests for exact-match filtering and ambiguous results
-- [ ] Document the lookup strategy clearly in code comments and README
+- [x] Add tests for exact-match filtering and ambiguous results
+- [x] Document the lookup strategy clearly in code comments and README

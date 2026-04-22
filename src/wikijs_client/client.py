@@ -126,12 +126,38 @@ class WikiJsClient:
         data = self._post(query)
         return [PageSummary.from_api(item) for item in data["pages"]["list"]]
 
-    def get_page_by_path(self, path: str) -> PageDetail | None:
-        """Return a detailed page object by path, or None if it does not exist."""
-        pages = self.list_pages()
-        match = next((p for p in pages if p.path == path), None)
-        if not match:
+    def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
+        """Use pages.search for targeted path lookup with exact-match filtering."""
+        results = self.search_pages(query="", path=path)
+        exact_matches = [page for page in results if page.path == path]
+        if not exact_matches:
             return None
+        if len(exact_matches) > 1:
+            raise WikiJsError(f"Multiple pages matched path exactly: {path}")
+        return exact_matches[0]
+
+    def search_pages(self, *, query: str, path: str = "") -> list[PageSummary]:
+        """Search pages using Wiki.js search results, optionally scoped by path input."""
+        query_text = _reject_unsupported_chars(query.strip(), "query", strict=False)
+        path_value = _normalize_path(path) if path.strip() else ""
+        gql = """
+        query ($path: String!, $query: String!) {
+          pages {
+            search(path: $path, locale: "en", query: $query) {
+              results {
+                id
+                path
+                title
+              }
+            }
+          }
+        }
+        """
+        data = self._post(gql, {"path": path_value, "query": query_text})
+        return [PageSummary.from_api(item) for item in data["pages"]["search"]["results"]]
+
+    def _get_page_by_id(self, page_id: int) -> PageDetail:
+        """Fetch a detailed page object by id."""
         query = """
         query ($id: Int!) {
           pages {
@@ -149,8 +175,16 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(query, {"id": match.id})
+        data = self._post(query, {"id": page_id})
         return PageDetail.from_api(data["pages"]["single"])
+
+    def get_page_by_path(self, path: str) -> PageDetail | None:
+        """Return a detailed page object by path, or None if it does not exist."""
+        path = _normalize_path(path)
+        match = self._find_page_summary_by_path_via_search(path)
+        if match is None:
+            return None
+        return self._get_page_by_id(match.id)
 
     def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
         """Create a page and return a normalized mutation result."""

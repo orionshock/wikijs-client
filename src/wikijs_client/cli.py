@@ -43,6 +43,18 @@ def render_page_row(page: PageSummary) -> str:
     return f"{page_id:>5}  {path:<42}  {title:<28}  {description}"
 
 
+def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
+    """Render page summaries as JSON or a compact human-readable table."""
+    if as_json:
+        emit([page.to_dict() for page in pages], as_json=True)
+        return
+    print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
+    print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
+    for page in pages:
+        print(render_page_row(page))
+    print(f"\n{len(pages)} page(s)")
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     client = build_client()
     pages = client.list_pages()
@@ -54,15 +66,26 @@ def cmd_list(args: argparse.Namespace) -> int:
     if args.regex:
         pattern = re.compile(args.regex)
         pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
-    if args.json:
-        emit([page.to_dict() for page in pages], as_json=True)
-    else:
-        print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
-        print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
-        for page in pages:
-            print(render_page_row(page))
-        print(f"\n{len(pages)} page(s)")
+    _render_page_table(pages, as_json=args.json)
     return 0
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    client = build_client()
+    pages = client.search_pages(query=args.text)
+    _render_page_table(pages, as_json=args.json)
+    return 0
+
+
+def cmd_exists(args: argparse.Namespace) -> int:
+    client = build_client()
+    page = client.get_page_by_path(args.path)
+    exists = page is not None
+    if args.json:
+        emit({"path": args.path, "exists": exists}, as_json=True)
+    else:
+        print(f"exists: {args.path}" if exists else f"missing: {args.path}")
+    return 0 if exists else 1
 
 
 def cmd_get(args: argparse.Namespace) -> int:
@@ -157,17 +180,42 @@ def cmd_move(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="wikijs-client")
+    parser = argparse.ArgumentParser(
+        prog="wikijs-client",
+        description="Practical Wiki.js GraphQL CLI with separate commands for exact existence checks, global search, and predictable list-based browsing.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_list = sub.add_parser("list")
-    p_list.add_argument("--prefix")
+    p_list = sub.add_parser(
+        "list",
+        help="list pages for browsing, optionally filtered client-side",
+        description="List pages using pages.list(). This is the predictable browse/subtree command. Use --prefix for path subtree browsing, --query for client-side substring matching, and --regex for client-side regular expression filtering.",
+    )
+    p_list.add_argument("--prefix", help="keep only pages whose path starts with this prefix")
     p_list.add_argument("--query", help="case-insensitive substring filter across path, title, and description")
     p_list.add_argument("--regex", help="regular expression filter across path, title, and description")
-    p_list.add_argument("--json", action="store_true")
+    p_list.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
     p_list.set_defaults(func=cmd_list)
 
-    p_get = sub.add_parser("get")
+    p_search = sub.add_parser(
+        "search",
+        help="search pages globally by text using Wiki.js search results",
+        description="Search pages using pages.search(path='', query=TEXT). This is the preferred global text search command when you want ranked search results rather than full-wiki list filtering.",
+    )
+    p_search.add_argument("text", help="search text to send to Wiki.js search")
+    p_search.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
+    p_search.set_defaults(func=cmd_search)
+
+    p_exists = sub.add_parser(
+        "exists",
+        help="check whether a page exists at an exact path",
+        description="Check whether a page exists at an exact path. This uses targeted path lookup rather than full-wiki listing and is intended for machine-friendly existence checks.",
+    )
+    p_exists.add_argument("path", help="exact page path to check")
+    p_exists.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
+    p_exists.set_defaults(func=cmd_exists)
+
+    p_get = sub.add_parser("get", help="fetch page content by exact path")
     p_get.add_argument("path")
     p_get.add_argument("--json", action="store_true")
     p_get.set_defaults(func=cmd_get)

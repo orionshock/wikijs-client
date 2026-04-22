@@ -24,8 +24,8 @@ def test_get_page_by_path_returns_none_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
     def fake_post(query, variables=None):
-        assert "list(orderBy: PATH)" in query
-        return {"pages": {"list": [{"id": 1, "path": "foo", "title": "Foo", "description": ""}]}}
+        assert "search(path:" in query
+        return {"pages": {"search": {"results": []}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
     assert client.get_page_by_path("bar") is None
@@ -37,8 +37,8 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
 
     def fake_post(query, variables=None):
         calls.append((query, variables))
-        if "list(orderBy: PATH)" in query:
-            return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": ""}]}}
+        if "search(path:" in query:
+            return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
         return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": [{"tag": "ideas", "title": "ideas"}]}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
@@ -47,7 +47,80 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     assert page.content == "body"
     assert isinstance(page, PageDetail)
     assert len(calls) == 2
+    assert calls[0][1] == {"path": "ideas/homeos", "query": ""}
     assert calls[1][1] == {"id": 7}
+
+
+def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    seen = {}
+
+    def fake_search(path):
+        seen["path"] = path
+        return None
+
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
+    assert client.get_page_by_path(" /ideas/homeos/ ") is None
+    assert seen["path"] == "ideas/homeos"
+
+
+def test_search_pages_uses_search_query(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    captured = {}
+
+    def fake_post(query, variables=None):
+        captured["query"] = query
+        captured["variables"] = variables
+        return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    results = client.search_pages(query="homeos")
+    assert len(results) == 1
+    assert results[0].path == "ideas/homeos"
+    assert "search(path:" in captured["query"]
+    assert captured["variables"] == {"path": "", "query": "homeos"}
+
+
+def test_search_lookup_filters_non_exact_matches(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        return {
+            "pages": {
+                "search": {
+                    "results": [
+                        {"id": 1, "path": "ideas/homeos-old", "title": "Old"},
+                        {"id": 7, "path": "ideas/homeos", "title": "HomeOS"},
+                    ]
+                }
+            }
+        }
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    match = client._find_page_summary_by_path_via_search("ideas/homeos")
+    assert match is not None
+    assert match.id == 7
+    assert match.path == "ideas/homeos"
+
+
+def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        return {
+            "pages": {
+                "search": {
+                    "results": [
+                        {"id": 7, "path": "ideas/homeos", "title": "HomeOS"},
+                        {"id": 8, "path": "ideas/homeos", "title": "HomeOS Duplicate"},
+                    ]
+                }
+            }
+        }
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly"):
+        client._find_page_summary_by_path_via_search("ideas/homeos")
 
 
 def test_upsert_page_creates_when_missing(monkeypatch):
