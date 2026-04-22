@@ -157,7 +157,7 @@ def cmd_move(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="wikijs-tool")
+    parser = argparse.ArgumentParser(prog="wikijs-client")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_list = sub.add_parser("list")

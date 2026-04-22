@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import requests
 
-from wikijs_graphql_tool.client import WikiJsClient, WikiJsError
-from wikijs_graphql_tool.models import MutationResult, PageDetail, PageTag
+from wikijs_client.client import WikiJsClient, WikiJsError
+from wikijs_client.models import MutationResult, PageDetail, PageTag
 
 
 class DummyResponse:

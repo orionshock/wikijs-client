@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wikijs-graphql-tool"
+name = "wikijs-client"
 version = "0.1.0"
-description = "A small Python CLI for practical Wiki.js GraphQL page operations"
+description = "A small Python CLI and library for practical Wiki.js GraphQL page operations"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-wikijs-tool = "wikijs_graphql_tool.cli:main"
+wikijs-client = "wikijs_client.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,6 +1,6 @@
-# wikijs-graphql-tool
+# wikijs-client
 
-A small Python tool for practical Wiki.js GraphQL page operations.
+A small Python CLI and library for practical Wiki.js GraphQL page operations.
 
 The immediate form is a CLI, but the code should be shaped so it can also support:
 
@@ -43,16 +43,16 @@ Input normalization is intentionally lightweight:
 export WIKIJS_URL='https://example.com/graphql'
 export WIKIJS_TOKEN='your-token'
 
-wikijs-tool list --prefix ideas
-wikijs-tool list --query homeos
-wikijs-tool list --regex '^ideas/'
-wikijs-tool get ideas/homeos
-wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md
-wikijs-tool upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
-wikijs-tool move ideas/scratch ideas/reference --title 'Reference Page'
-wikijs-tool move ideas/scratch ideas/reference --dry-run
-wikijs-tool delete ideas/scratch --dry-run
-wikijs-tool delete ideas/scratch
+wikijs-client list --prefix ideas
+wikijs-client list --query homeos
+wikijs-client list --regex '^ideas/'
+wikijs-client get ideas/homeos
+wikijs-client upsert ideas/scratch 'Scratch Page' --file scratch.md
+wikijs-client upsert ideas/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
+wikijs-client move ideas/scratch ideas/reference --title 'Reference Page'
+wikijs-client move ideas/scratch ideas/reference --dry-run
+wikijs-client delete ideas/scratch --dry-run
+wikijs-client delete ideas/scratch
 ```
 
 Human-readable output is the default for mutation commands. Use `--json` when you want script-friendly structured output.

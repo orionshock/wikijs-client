@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from wikijs_graphql_tool import cli
-from wikijs_graphql_tool.client import WikiJsError
-from wikijs_graphql_tool.models import MutationResult, PageDetail, PageSummary
+from wikijs_client import cli
+from wikijs_client.client import WikiJsError
+from wikijs_client.models import MutationResult, PageDetail, PageSummary
 
 
 class DummyClient:
