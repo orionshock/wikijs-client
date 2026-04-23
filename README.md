@@ -82,6 +82,8 @@ from wikijs_client import (
     WikiJsClient,
     WikiJsError,
     WikiJsSchemaError,
+    WikiJsConflictError,
+    WikiJsValidationError,
     PageSummary,
     PageDetail,
     PageTag,
@@ -109,8 +111,10 @@ Core return models:
 
 Error types:
 
-- `WikiJsError`: request, validation, or operational failure
+- `WikiJsError`: request or general operational failure
 - `WikiJsSchemaError`: the deployment responded, but did not expose the schema shape this client expected
+- `WikiJsConflictError`: a mutation failed due to a duplicate path or similar collision
+- `WikiJsValidationError`: a mutation failed validation and should be fixed before retrying
 
 ## Notes
 

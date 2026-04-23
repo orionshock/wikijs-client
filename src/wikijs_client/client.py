@@ -18,6 +18,14 @@ class WikiJsSchemaError(WikiJsError):
     """Raised when the Wiki.js schema is missing fields or shapes the client expects."""
 
 
+class WikiJsConflictError(WikiJsError):
+    """Raised when a mutation fails due to a path conflict or similar collision."""
+
+
+class WikiJsValidationError(WikiJsError):
+    """Raised when a mutation fails validation before any useful state change occurs."""
+
+
 KNOWN_BAD_INVISIBLES = {
     "\ufeff",
     "\u200b",
@@ -74,6 +82,12 @@ def _normalize_tags(tags: list[str] | None) -> list[str]:
     return normalized
 
 
+def _normalize_response_message(message: Any) -> str:
+    if message is None:
+        return ""
+    return str(message).strip()
+
+
 @dataclass
 class WikiJsClient:
     """Minimal Wiki.js GraphQL client focused on practical page operations.
@@ -95,6 +109,44 @@ class WikiJsClient:
     token: str
     timeout: int = 30
     locale: str = "en"
+
+    def _raise_for_mutation_failure(self, *, action: str, response: dict[str, Any] | None) -> None:
+        response = response or {}
+        succeeded = bool(response.get("succeeded"))
+        if succeeded:
+            return
+        message = _normalize_response_message(response.get("message"))
+        error_code = response.get("errorCode")
+        code_text = "" if error_code in (None, "") else f" (errorCode={error_code})"
+        lowered = message.lower()
+        detail = f"Wiki.js {action} failed"
+        if message:
+            detail += f": {message}{code_text}"
+        elif code_text:
+            detail += code_text
+
+        conflict_markers = (
+            "already exists",
+            "duplicate",
+            "conflict",
+            "taken",
+            "another page",
+        )
+        validation_markers = (
+            "invalid",
+            "required",
+            "must not",
+            "must be",
+            "validation",
+            "too long",
+            "too short",
+            "not allowed",
+        )
+        if any(marker in lowered for marker in conflict_markers):
+            raise WikiJsConflictError(detail)
+        if any(marker in lowered for marker in validation_markers):
+            raise WikiJsValidationError(detail)
+        raise WikiJsError(detail)
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
@@ -294,10 +346,11 @@ class WikiJsClient:
         })
         result = data["pages"]["create"]
         response = result["responseResult"]
+        self._raise_for_mutation_failure(action="create", response=response)
         return MutationResult(
             action="created",
             succeeded=bool(response.get("succeeded")),
-            message=response.get("message") or "",
+            message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
             page=result.get("page"),
             changed={
@@ -347,10 +400,11 @@ class WikiJsClient:
         })
         result = data["pages"]["update"]
         response = result["responseResult"]
+        self._raise_for_mutation_failure(action="update", response=response)
         return MutationResult(
             action="updated",
             succeeded=bool(response.get("succeeded")),
-            message=response.get("message") or "",
+            message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
             page={"id": page_id, "path": path, "title": title},
             changed={
@@ -493,11 +547,12 @@ class WikiJsClient:
         data = self._post(mutation, {"id": existing.id})
         result = data["pages"]["delete"]
         response = result["responseResult"]
+        self._raise_for_mutation_failure(action="delete", response=response)
         succeeded = bool(response.get("succeeded"))
         return MutationResult(
             action="deleted",
             succeeded=succeeded,
-            message=response.get("message") or "",
+            message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
             previous_page={
                 "id": existing.id,

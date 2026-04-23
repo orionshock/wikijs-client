@@ -4,14 +4,11 @@ This file is the project scratchpad for future work.
 
 ## Near-term ideas
 
-- probe whether any Wiki.js deployments expose a more direct exact-match helper than the current `pages.search(...)` + exact client-side filtering
-- improve create/update/delete conflict reporting when the API returns richer duplicate-path or validation errors
 - add more tests around metadata preservation and replacement edge cases
-- decide whether `MutationResult.changed` should grow into a more formal diff contract
 
 ## Possible feature work
 
-- explicit sorting controls for `list` where the API supports them cleanly
+- explicit sorting controls for `list` where the API supports them cleanly = NO
 - validate-style or preview flows for mutations where feasible
 - lightweight versioning and release discipline once the API shape settles
 

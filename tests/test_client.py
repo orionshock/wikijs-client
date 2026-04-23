@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import requests
 
-from wikijs_client.client import WikiJsClient, WikiJsError, WikiJsSchemaError
+from wikijs_client.client import WikiJsClient, WikiJsConflictError, WikiJsError, WikiJsSchemaError, WikiJsValidationError
 from wikijs_client.models import MutationResult, PageDetail, PageTag
 
 
@@ -312,6 +312,49 @@ def test_create_page_allows_non_strict_description_formatting_chars():
     assert captured["description"] == "desc\u2060ok"
 
 
+def test_create_page_raises_conflict_error_on_duplicate_path(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        return {
+            "pages": {
+                "create": {
+                    "responseResult": {
+                        "succeeded": False,
+                        "message": "Page already exists at this path",
+                        "errorCode": 409,
+                    },
+                    "page": None,
+                }
+            }
+        }
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    with pytest.raises(WikiJsConflictError, match=r"create failed: Page already exists at this path \(errorCode=409\)"):
+        client.create_page(path="ideas/test", title="Test", content="# Test")
+
+
+def test_update_page_raises_validation_error_on_invalid_payload(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        return {
+            "pages": {
+                "update": {
+                    "responseResult": {
+                        "succeeded": False,
+                        "message": "Title is required",
+                        "errorCode": 400,
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    with pytest.raises(WikiJsValidationError, match=r"update failed: Title is required \(errorCode=400\)"):
+        client.update_page(page_id=1, path="ideas/test", title="Test", content="# Test")
+
+
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
@@ -359,6 +402,22 @@ def test_delete_page_returns_previous_page_payload(monkeypatch):
         "tags": [{"tag": "cleanup", "title": "Cleanup"}],
     }
     assert result.changed["deleted"] is True
+
+
+def test_delete_page_raises_conflict_error_when_api_reports_lock(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "get_page_by_path",
+        lambda path: PageDetail(id=3, path=path, title="Gone", content="body", description="desc", tags=[]),
+    )
+
+    def fake_post(query, variables=None):
+        return {"pages": {"delete": {"responseResult": {"succeeded": False, "message": "Delete conflict: page is locked", "errorCode": 423}}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    with pytest.raises(WikiJsConflictError, match=r"delete failed: Delete conflict: page is locked \(errorCode=423\)"):
+        client.delete_page_by_path("ideas/gone")
 
 
 def test_update_page_rejects_zero_width_tag(monkeypatch):
