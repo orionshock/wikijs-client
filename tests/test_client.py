@@ -122,19 +122,20 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
         client._find_page_summary_by_path_via_search("ideas/homeos")
 
 
-def test_get_page_by_path_can_use_list_lookup_mode(monkeypatch):
-    client = WikiJsClient(url="https://example.invalid/graphql", token="token", exact_path_lookup_mode="list")
+def test_list_pages_without_filters_uses_pages_list(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    captured = {}
 
     def fake_post(query, variables=None):
-        if "list(orderBy: PATH)" in query:
-            return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": "desc"}]}}
-        return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": []}}}
+        captured["query"] = query
+        captured["variables"] = variables
+        return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": "desc"}]}}
 
     monkeypatch.setattr(client, "_post", fake_post)
-    page = client.get_page_by_path("ideas/homeos")
-    assert page is not None
-    assert page.id == 7
-    assert page.content == "body"
+    pages = client.list_pages()
+    assert len(pages) == 1
+    assert "list(orderBy: PATH)" in captured["query"]
+    assert captured["variables"] is None
 
 
 def test_list_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
@@ -430,10 +431,18 @@ def test_list_pages_raises_schema_error_when_list_missing(monkeypatch):
         client.list_pages()
 
 
-def test_get_page_by_path_raises_on_invalid_lookup_mode():
-    client = WikiJsClient(url="https://example.invalid/graphql", token="token", exact_path_lookup_mode="mystery")
-    with pytest.raises(WikiJsError, match="exact_path_lookup_mode must be 'search' or 'list'"):
-        client.get_page_by_path("ideas/homeos")
+def test_list_pages_with_path_uses_search(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    captured = {}
+
+    def fake_post(query, variables=None):
+        captured["variables"] = variables
+        return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    pages = client.list_pages(path="ideas")
+    assert len(pages) == 1
+    assert captured["variables"] == {"path": "ideas", "query": "", "locale": "en"}
 
 
 def test_search_pages_uses_client_locale(monkeypatch):

@@ -17,10 +17,9 @@ def build_client() -> WikiJsClient:
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
     locale = os.environ.get("WIKIJS_LOCALE", "en")
-    exact_path_lookup_mode = os.environ.get("WIKIJS_EXACT_PATH_LOOKUP", "search")
     if not url or not token:
         raise WikiJsError("WIKIJS_URL and WIKIJS_TOKEN must be set")
-    return WikiJsClient(url=url, token=token, locale=locale, exact_path_lookup_mode=exact_path_lookup_mode)
+    return WikiJsClient(url=url, token=token, locale=locale)
 
 
 def emit(data: Any, *, as_json: bool) -> None:
@@ -45,50 +44,25 @@ def render_page_row(page: PageSummary) -> str:
     return f"{page_id:>5}  {path:<42}  {title:<28}  {description}"
 
 
-def _paginate_pages(pages: list[PageSummary], *, limit: int | None, offset: int) -> tuple[list[PageSummary], dict[str, int]]:
-    """Return a sliced page list plus compact pagination metadata."""
-    total = len(pages)
-    start = max(0, offset)
-    if limit is None:
-        end = total
-    else:
-        end = max(start, min(total, start + limit))
-    return pages[start:end], {"offset": start, "limit": limit if limit is not None else total, "returned": max(0, end - start), "total": total}
-
-
-def _render_page_table(pages: list[PageSummary], *, as_json: bool, pagination: dict[str, int] | None = None) -> None:
+def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
     """Render page summaries as JSON or a compact human-readable table."""
     if as_json:
-        payload: Any
-        if pagination is None:
-            payload = [page.to_dict() for page in pages]
-        else:
-            payload = {"pages": [page.to_dict() for page in pages], "pagination": pagination}
-        emit(payload, as_json=True)
+        emit([page.to_dict() for page in pages], as_json=True)
         return
     print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
     print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
     for page in pages:
         print(render_page_row(page))
-    if pagination is None:
-        print(f"\n{len(pages)} page(s)")
-    else:
-        print(f"\n{pagination['returned']} page(s) shown (offset {pagination['offset']}, total {pagination['total']})")
+    print(f"\n{len(pages)} page(s)")
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     client = build_client()
-    pages = client.list_pages()
-    if args.prefix:
-        pages = [p for p in pages if p.path.startswith(args.prefix)]
-    if args.query:
-        needle = args.query.lower()
-        pages = [p for p in pages if needle in (p.path.lower() + "\n" + p.title.lower() + "\n" + p.description.lower())]
+    pages = client.list_pages(query=args.query or "", path=args.path or "")
     if args.regex:
         pattern = re.compile(args.regex)
         pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
-    paged_pages, pagination = _paginate_pages(pages, limit=args.limit, offset=args.offset)
-    _render_page_table(paged_pages, as_json=args.json, pagination=pagination)
+    _render_page_table(pages, as_json=args.json)
     return 0
 
 
@@ -210,14 +184,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_list = sub.add_parser(
         "list",
-        help="list pages for browsing, optionally filtered client-side",
-        description="List pages using pages.list(). This is the predictable browse/subtree command. Use --prefix for path subtree browsing, --query for client-side substring matching, and --regex for client-side regular expression filtering.",
+        help="list pages for browsing or server-backed discovery",
+        description="List pages using pages.list() when called without filters. Use --query to pass text into Wiki.js search, --path to scope search by path, and --regex for optional local post-filtering.",
     )
-    p_list.add_argument("--prefix", help="keep only pages whose path starts with this prefix")
-    p_list.add_argument("--query", help="case-insensitive substring filter across path, title, and description")
-    p_list.add_argument("--regex", help="regular expression filter across path, title, and description")
-    p_list.add_argument("--limit", type=int, help="maximum number of filtered pages to return")
-    p_list.add_argument("--offset", type=int, default=0, help="number of filtered pages to skip before returning results")
+    p_list.add_argument("--query", help="text to pass to Wiki.js search query")
+    p_list.add_argument("--path", help="path to pass to Wiki.js search for scoped discovery")
+    p_list.add_argument("--regex", help="regular expression filter across returned path, title, and description")
     p_list.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
     p_list.set_defaults(func=cmd_list)
 

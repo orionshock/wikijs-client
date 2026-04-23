@@ -6,7 +6,7 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
 
 - exact page existence checks by path
 - global text search
-- predictable page listing with client-side filtering and pagination
+- predictable page listing
 - page reads by exact path
 - idempotent page upsert
 - page move/rename
@@ -34,8 +34,10 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
   - best when you know a word or phrase but not the page path
 
 - `list`
-  - browse command backed by `pages.list()`
-  - supports client-side filtering and pagination with `--prefix`, `--query`, `--regex`, `--limit`, and `--offset`
+  - with no flags, shows the full `pages.list()` inventory
+  - with `--query`, passes text into Wiki.js search
+  - with `--path`, scopes Wiki.js search by path
+  - `--regex` is an optional local post-filter over returned rows
 
 `move` and `delete` support `--dry-run`.
 
@@ -47,7 +49,9 @@ export WIKIJS_TOKEN='your-token'
 
 wikijs-client exists docs/getting-started
 wikijs-client search reverse-proxy
-wikijs-client list --prefix docs --limit 25 --offset 0
+wikijs-client list
+wikijs-client list --query reverse-proxy
+wikijs-client list --path infrastructure
 wikijs-client get docs/getting-started
 wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md
 wikijs-client move docs/scratch docs/reference --title 'Reference Page'
@@ -68,7 +72,6 @@ Environment variables:
 - `WIKIJS_URL`
 - `WIKIJS_TOKEN`
 - `WIKIJS_LOCALE` (optional, default: `en`)
-- `WIKIJS_EXACT_PATH_LOOKUP` (optional, `search` or `list`, default: `search`)
 
 ## Python API
 
@@ -111,8 +114,8 @@ Error types:
 
 ## Notes
 
-- exact path lookup is explicit: use `search` mode by default, or opt into `list` mode with `WIKIJS_EXACT_PATH_LOOKUP=list`
-- list filtering and pagination are currently client-side
+- exact path lookup uses targeted `pages.search(...)` plus exact client-side filtering
+- `list` uses `pages.list()` with no filters, and `pages.search(...)` when `--query` or `--path` is used
 - compatibility has been validated against one real Wiki.js environment so far
 
 ## Development

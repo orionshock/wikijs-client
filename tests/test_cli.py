@@ -12,15 +12,18 @@ class DummyClient:
         self.deleted = []
         self.moved = []
 
-    def list_pages(self):
+    def list_pages(self, *, query="", path=""):
+        if query == "alpha":
+            return [PageSummary(id=1, path="ideas/a", title="A", description="alpha note")]
+        if path == "ideas":
+            return [PageSummary(id=1, path="ideas/a", title="A", description="alpha note")]
         return [
             PageSummary(id=1, path="ideas/a", title="A", description="alpha note"),
             PageSummary(id=2, path="infra/b", title="B", description="beta infra"),
         ]
 
     def search_pages(self, *, query, path=""):
-        assert path == ""
-        if query == "alpha":
+        if query == "alpha" and path == "":
             return [PageSummary(id=1, path="ideas/a", title="A", description="alpha note")]
         return []
 
@@ -57,42 +60,41 @@ class DummyClient:
         )
 
 
-def test_cmd_list_filters_prefix(monkeypatch, capsys):
+def test_cmd_list_no_args_shows_all(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix="ideas", query=None, regex=None, limit=None, offset=0, json=False)
+    args = cli.argparse.Namespace(query=None, path=None, regex=None, json=False)
+    assert cli.cmd_list(args) == 0
+    out = capsys.readouterr().out
+    assert "ideas/a" in out
+    assert "infra/b" in out
+    assert "ID" in out
+
+
+def test_cmd_list_uses_server_query(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(query="alpha", path=None, regex=None, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "ideas/a" in out
     assert "infra/b" not in out
-    assert "ID" in out
 
 
-def test_cmd_list_filters_query(monkeypatch, capsys):
+def test_cmd_list_uses_server_path(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix=None, query="beta", regex=None, limit=None, offset=0, json=False)
+    args = cli.argparse.Namespace(query=None, path="ideas", regex=None, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
-    assert "infra/b" in out
-    assert "ideas/a" not in out
+    assert "ideas/a" in out
+    assert "infra/b" not in out
 
 
 def test_cmd_list_filters_regex(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix=None, query=None, regex=r"ideas/.*", limit=None, offset=0, json=False)
+    args = cli.argparse.Namespace(query=None, path=None, regex=r"ideas/.*", json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "ideas/a" in out
     assert "infra/b" not in out
-
-
-def test_cmd_list_json_includes_pagination(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix=None, query=None, regex=None, limit=1, offset=1, json=True)
-    assert cli.cmd_list(args) == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["pagination"] == {"offset": 1, "limit": 1, "returned": 1, "total": 2}
-    assert len(out["pages"]) == 1
-    assert out["pages"][0]["path"] == "infra/b"
 
 
 def test_cmd_search_json(monkeypatch, capsys):
@@ -202,8 +204,8 @@ def test_build_parser_includes_new_commands():
     list_help = parser._subparsers._group_actions[0].choices["list"].format_help()
     assert "search" in help_text
     assert "exists" in help_text
-    assert "--limit" in list_help
-    assert "--offset" in list_help
+    assert "--query" in list_help
+    assert "--path" in list_help
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):
@@ -228,12 +230,10 @@ def test_build_client_uses_optional_locale(monkeypatch):
     monkeypatch.setenv("WIKIJS_URL", "https://example.invalid/graphql")
     monkeypatch.setenv("WIKIJS_TOKEN", "secret")
     monkeypatch.setenv("WIKIJS_LOCALE", "fr")
-    monkeypatch.setenv("WIKIJS_EXACT_PATH_LOOKUP", "list")
     client = cli.build_client()
     assert client.url == "https://example.invalid/graphql"
     assert client.token == "secret"
     assert client.locale == "fr"
-    assert client.exact_path_lookup_mode == "list"
 
 
 def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):

@@ -13,7 +13,6 @@ This file is the project scratchpad for future work.
 
 - explicit sorting controls for `list` where the API supports them cleanly
 - validate-style or preview flows for mutations where feasible
-- server-side pagination if it is practical and portable across Wiki.js deployments
 - lightweight versioning and release discipline once the API shape settles
 
 ## Packaging / interface directions

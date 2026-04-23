@@ -96,7 +96,6 @@ class WikiJsClient:
     token: str
     timeout: int = 30
     locale: str = "en"
-    exact_path_lookup_mode: str = "search"
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
@@ -129,30 +128,35 @@ class WikiJsClient:
             raise WikiJsError("Wiki.js response did not include a data payload")
         return data
 
-    def list_pages(self) -> list[PageSummary]:
-        """Return all pages as normalized PageSummary objects.
+    def list_pages(self, *, query: str = "", path: str = "") -> list[PageSummary]:
+        """Return pages as normalized PageSummary objects.
 
-        This is the stable browse/inventory method. It maps to Wiki.js `pages.list()`
-        and is best for broad listing plus client-side filtering.
+        With no arguments, this returns the full `pages.list()` inventory.
+        With `query` or `path`, this uses Wiki.js `pages.search(...)` so callers can
+        discover pages by server-backed text or subtree-style path input.
         """
-        query = """
-        query {
-          pages {
-            list(orderBy: PATH) {
-              id
-              path
-              title
-              description
+        query_text = _reject_unsupported_chars(query.strip(), "query", strict=False)
+        path_value = _normalize_path(path) if path.strip() else ""
+        if not query_text and not path_value:
+            gql = """
+            query {
+              pages {
+                list(orderBy: PATH) {
+                  id
+                  path
+                  title
+                  description
+                }
+              }
             }
-          }
-        }
-        """
-        try:
-            data = self._post(query)
-            items = data["pages"]["list"]
-        except KeyError as exc:
-            raise WikiJsSchemaError("Wiki.js response did not include pages.list; this deployment may not support list-based browsing") from exc
-        return [PageSummary.from_api(item) for item in items]
+            """
+            try:
+                data = self._post(gql)
+                items = data["pages"]["list"]
+            except KeyError as exc:
+                raise WikiJsSchemaError("Wiki.js response did not include pages.list; this deployment may not support list-based browsing") from exc
+            return [PageSummary.from_api(item) for item in items]
+        return self.search_pages(query=query_text, path=path_value)
 
     def _find_single_exact_match(self, results: list[PageSummary], *, path: str, source: str) -> PageSummary | None:
         exact_matches = [page for page in results if page.path == path]
@@ -239,22 +243,12 @@ class WikiJsClient:
     def get_page_by_path(self, path: str) -> PageDetail | None:
         """Return a detailed page by exact path, or None if it does not exist.
 
-        The path is normalized before lookup. Exact lookup uses the configured
-        `exact_path_lookup_mode`:
-        - `search` (default): targeted `pages.search(...)` plus exact client-side filtering
-        - `list`: `pages.list()` plus exact client-side filtering
-
-        No fallback is applied implicitly; callers should choose the strategy they want.
+        The path is normalized before lookup. Exact lookup uses targeted
+        `pages.search(...)` plus exact client-side filtering, followed by
+        `pages.single(id: ...)` for the full page payload.
         """
         path = _normalize_path(path)
-        if self.exact_path_lookup_mode == "search":
-            match = self._find_page_summary_by_path_via_search(path)
-        elif self.exact_path_lookup_mode == "list":
-            match = self._find_page_summary_by_path_via_list(path)
-        else:
-            raise WikiJsError(
-                "exact_path_lookup_mode must be 'search' or 'list'"
-            )
+        match = self._find_page_summary_by_path_via_search(path)
         if match is None:
             return None
         return self._get_page_by_id(match.id)
