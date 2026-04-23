@@ -59,7 +59,7 @@ class DummyClient:
 
 def test_cmd_list_filters_prefix(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix="ideas", query=None, regex=None, json=False)
+    args = cli.argparse.Namespace(prefix="ideas", query=None, regex=None, limit=None, offset=0, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "ideas/a" in out
@@ -69,7 +69,7 @@ def test_cmd_list_filters_prefix(monkeypatch, capsys):
 
 def test_cmd_list_filters_query(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix=None, query="beta", regex=None, json=False)
+    args = cli.argparse.Namespace(prefix=None, query="beta", regex=None, limit=None, offset=0, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "infra/b" in out
@@ -78,11 +78,21 @@ def test_cmd_list_filters_query(monkeypatch, capsys):
 
 def test_cmd_list_filters_regex(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(prefix=None, query=None, regex=r"ideas/.*", json=False)
+    args = cli.argparse.Namespace(prefix=None, query=None, regex=r"ideas/.*", limit=None, offset=0, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
     assert "ideas/a" in out
     assert "infra/b" not in out
+
+
+def test_cmd_list_json_includes_pagination(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(prefix=None, query=None, regex=None, limit=1, offset=1, json=True)
+    assert cli.cmd_list(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["pagination"] == {"offset": 1, "limit": 1, "returned": 1, "total": 2}
+    assert len(out["pages"]) == 1
+    assert out["pages"][0]["path"] == "infra/b"
 
 
 def test_cmd_search_json(monkeypatch, capsys):
@@ -189,8 +199,11 @@ def test_cmd_move_dry_run(monkeypatch, capsys):
 def test_build_parser_includes_new_commands():
     parser = cli.build_parser()
     help_text = parser.format_help()
+    list_help = parser._subparsers._group_actions[0].choices["list"].format_help()
     assert "search" in help_text
     assert "exists" in help_text
+    assert "--limit" in list_help
+    assert "--offset" in list_help
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):

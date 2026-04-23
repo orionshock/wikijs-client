@@ -44,16 +44,35 @@ def render_page_row(page: PageSummary) -> str:
     return f"{page_id:>5}  {path:<42}  {title:<28}  {description}"
 
 
-def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
+def _paginate_pages(pages: list[PageSummary], *, limit: int | None, offset: int) -> tuple[list[PageSummary], dict[str, int]]:
+    """Return a sliced page list plus compact pagination metadata."""
+    total = len(pages)
+    start = max(0, offset)
+    if limit is None:
+        end = total
+    else:
+        end = max(start, min(total, start + limit))
+    return pages[start:end], {"offset": start, "limit": limit if limit is not None else total, "returned": max(0, end - start), "total": total}
+
+
+def _render_page_table(pages: list[PageSummary], *, as_json: bool, pagination: dict[str, int] | None = None) -> None:
     """Render page summaries as JSON or a compact human-readable table."""
     if as_json:
-        emit([page.to_dict() for page in pages], as_json=True)
+        payload: Any
+        if pagination is None:
+            payload = [page.to_dict() for page in pages]
+        else:
+            payload = {"pages": [page.to_dict() for page in pages], "pagination": pagination}
+        emit(payload, as_json=True)
         return
     print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
     print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
     for page in pages:
         print(render_page_row(page))
-    print(f"\n{len(pages)} page(s)")
+    if pagination is None:
+        print(f"\n{len(pages)} page(s)")
+    else:
+        print(f"\n{pagination['returned']} page(s) shown (offset {pagination['offset']}, total {pagination['total']})")
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -67,7 +86,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     if args.regex:
         pattern = re.compile(args.regex)
         pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
-    _render_page_table(pages, as_json=args.json)
+    paged_pages, pagination = _paginate_pages(pages, limit=args.limit, offset=args.offset)
+    _render_page_table(paged_pages, as_json=args.json, pagination=pagination)
     return 0
 
 
@@ -195,6 +215,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--prefix", help="keep only pages whose path starts with this prefix")
     p_list.add_argument("--query", help="case-insensitive substring filter across path, title, and description")
     p_list.add_argument("--regex", help="regular expression filter across path, title, and description")
+    p_list.add_argument("--limit", type=int, help="maximum number of filtered pages to return")
+    p_list.add_argument("--offset", type=int, default=0, help="number of filtered pages to skip before returning results")
     p_list.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
     p_list.set_defaults(func=cmd_list)
 

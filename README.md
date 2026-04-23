@@ -49,7 +49,7 @@ The CLI now has an intentional split between three read/discovery modes:
 - `list`
   - predictable browse command backed by `pages.list()`
   - best for subtree browsing, broad inventories, and client-side filtering
-  - supports `--prefix`, `--query`, and `--regex`
+  - supports `--prefix`, `--query`, `--regex`, `--limit`, and `--offset`
 
 This split is deliberate:
 - exact existence checks should not require listing the entire wiki
@@ -78,6 +78,7 @@ wikijs-client list --prefix docs
 wikijs-client list --prefix infrastructure/reverse-proxy
 wikijs-client list --query onboarding
 wikijs-client list --regex '^docs/'
+wikijs-client list --limit 25 --offset 50
 wikijs-client get docs/getting-started
 wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md
 wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md --description 'replace me' --replace-description --tags notes scratch --replace-tags
@@ -93,11 +94,13 @@ Human-readable output is the default for mutation commands. Use `--json` when yo
 
 `search` performs global text search through `pages.search(path="", query=TEXT)` and renders the returned results as a compact table by default.
 
-`list` now renders a compact table by default, and can filter by:
+`list` now renders a compact table by default, and can filter/page by:
 
 - `--prefix`
 - `--query` for case-insensitive substring matching
 - `--regex` for regular expression matching
+- `--limit` for a maximum number of filtered rows returned
+- `--offset` for skipping filtered rows before output
 
 ## Metadata update semantics
 
@@ -250,7 +253,7 @@ Goal: improve discovery and compatibility without blurring command semantics.
 
 Likely work:
 
-- add pagination controls for large wikis
+- evaluate whether server-side pagination is feasible or worthwhile across more Wiki.js deployments beyond the current client-side `--limit` / `--offset` flow
 - add explicit sorting controls where the API supports them cleanly
 - evaluate whether exact-match or title/path helper queries can improve compatibility across more Wiki.js deployments
 - evaluate whether the current list-based fallback for exact path lookup should remain enabled by default across more Wiki.js deployments
@@ -327,8 +330,7 @@ Failure modes handled explicitly now include:
 
 ## Known limitations
 
-- list output is currently unpaginated
-- list filtering happens client-side after fetching the page list
+- list paging and filtering currently happen client-side after fetching the page list
 - global text search depends on the current behavior and ranking of `pages.search(...)`
 - exact path lookup now prefers `pages.search(...)` plus exact client-side path filtering, then falls back to `pages.list()` plus exact client-side filtering when search misses
 - compatibility has been validated against one real Wiki.js environment so far, not a broad matrix of versions
