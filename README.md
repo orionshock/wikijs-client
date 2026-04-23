@@ -13,9 +13,14 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
 - optional delete
 - script-friendly JSON output
 
+## Top-level flags
+
+- `--versioncheck`
+  - checks the server version against the project target: `2.5.312`
+  - warns when the server version differs
+
 ## Commands
 
-- `version`
 - `exists`
 - `search`
 - `get`
@@ -25,10 +30,6 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
 - `delete`
 
 ## Command semantics
-
-- `version`
-  - queries `system.info` for current/latest version info
-  - supports `--target-version` to emit a warning on mismatch
 
 - `exists PATH`
   - exact path presence check
@@ -52,7 +53,8 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
 export WIKIJS_URL='https://example.com/graphql'
 export WIKIJS_TOKEN='your-token'
 
-wikijs-client version --target-version 2.5.312
+wikijs-client --versioncheck
+wikijs-client --versioncheck --json
 wikijs-client exists docs/getting-started
 wikijs-client search reverse-proxy
 wikijs-client list
@@ -128,7 +130,7 @@ Error types:
 ## Notes
 
 - exact path lookup uses targeted `pages.search(...)` plus exact client-side filtering
-- `version` queries `system.info` only when asked; there is no per-call version check tax
+- `--versioncheck` queries `system.info` only when asked; there is no per-call version check tax
 - `list` uses `pages.list()` with no filters, and `pages.search(...)` when `--query` or `--path` is used
 - compatibility has been validated against one real Wiki.js environment so far
 

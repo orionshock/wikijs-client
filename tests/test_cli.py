@@ -70,21 +70,31 @@ class DummyClient:
         )
 
 
-def test_cmd_version_json(monkeypatch, capsys):
+def test_run_versioncheck_json(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(target_version="2.5.312", json=True)
-    assert cli.cmd_version(args) == 0
+    assert cli.run_versioncheck(as_json=True) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["currentVersion"] == "2.5.312"
+    assert out["targetVersion"] == "2.5.312"
     assert out["matchesTarget"] is True
 
 
-def test_cmd_version_warns_on_mismatch(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    args = cli.argparse.Namespace(target_version="2.5.999", json=False)
-    assert cli.cmd_version(args) == 0
+def test_run_versioncheck_warns_on_mismatch(monkeypatch, capsys):
+    class MismatchClient(DummyClient):
+        def get_version(self, *, target_version=""):
+            return SiteVersion(
+                current_version="2.5.999",
+                latest_version="2.5.999",
+                latest_version_release_date="2026-02-11T00:00:00.000Z",
+                upgrade_capable=False,
+                target_version=target_version,
+                matches_target=False,
+            )
+
+    monkeypatch.setattr(cli, "build_client", lambda: MismatchClient())
+    assert cli.run_versioncheck(as_json=False) == 0
     out = capsys.readouterr().out
-    assert "warning: expected 2.5.999, got 2.5.312" in out
+    assert "warning: expected 2.5.312, got 2.5.999" in out
 
 
 def test_cmd_list_no_args_shows_all(monkeypatch, capsys):
@@ -231,7 +241,7 @@ def test_build_parser_includes_new_commands():
     list_help = parser._subparsers._group_actions[0].choices["list"].format_help()
     assert "search" in help_text
     assert "exists" in help_text
-    assert "version" in help_text
+    assert "--versioncheck" in help_text
     assert "--query" in list_help
     assert "--path" in list_help
 
@@ -252,6 +262,13 @@ def test_main_reports_missing_env(capsys, monkeypatch):
     assert cli.main(["list"]) != 0
     err = capsys.readouterr().err
     assert "WIKIJS_URL and WIKIJS_TOKEN must be set" in err
+
+
+def test_main_supports_versioncheck_flag(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    assert cli.main(["--versioncheck", "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["targetVersion"] == "2.5.312"
 
 
 def test_build_client_uses_optional_locale(monkeypatch):
