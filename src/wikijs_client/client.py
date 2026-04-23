@@ -145,6 +145,15 @@ class WikiJsClient:
         data = self._post(query)
         return [PageSummary.from_api(item) for item in data["pages"]["list"]]
 
+    def _find_page_summary_by_path_via_list(self, path: str) -> PageSummary | None:
+        """Fallback exact path lookup using pages.list() plus client-side filtering."""
+        exact_matches = [page for page in self.list_pages() if page.path == path]
+        if not exact_matches:
+            return None
+        if len(exact_matches) > 1:
+            raise WikiJsError(f"Multiple pages matched path exactly: {path}")
+        return exact_matches[0]
+
     def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
         """Use pages.search for targeted path lookup with exact-match filtering."""
         results = self.search_pages(query="", path=path)
@@ -220,6 +229,8 @@ class WikiJsClient:
         """
         path = _normalize_path(path)
         match = self._find_page_summary_by_path_via_search(path)
+        if match is None:
+            match = self._find_page_summary_by_path_via_list(path)
         if match is None:
             return None
         return self._get_page_by_id(match.id)

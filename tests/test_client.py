@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from wikijs_client.client import WikiJsClient, WikiJsError
-from wikijs_client.models import MutationResult, PageDetail, PageTag
+from wikijs_client.models import MutationResult, PageDetail, PageSummary, PageTag
 
 
 class DummyResponse:
@@ -24,8 +24,9 @@ def test_get_page_by_path_returns_none_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
     def fake_post(query, variables=None):
-        assert "search(path:" in query
-        return {"pages": {"search": {"results": []}}}
+        if "search(path:" in query:
+            return {"pages": {"search": {"results": []}}}
+        return {"pages": {"list": []}}
 
     monkeypatch.setattr(client, "_post", fake_post)
     assert client.get_page_by_path("bar") is None
@@ -60,6 +61,7 @@ def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
         return None
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", lambda path: None)
     assert client.get_page_by_path(" /ideas/homeos/ ") is None
     assert seen["path"] == "ideas/homeos"
 
@@ -121,6 +123,37 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
     monkeypatch.setattr(client, "_post", fake_post)
     with pytest.raises(WikiJsError, match="Multiple pages matched path exactly"):
         client._find_page_summary_by_path_via_search("ideas/homeos")
+
+
+def test_get_page_by_path_falls_back_to_list_lookup(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        if "search(path:" in query:
+            return {"pages": {"search": {"results": []}}}
+        if "list(orderBy: PATH)" in query:
+            return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": "desc"}]}}
+        return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": []}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    page = client.get_page_by_path("ideas/homeos")
+    assert page is not None
+    assert page.id == 7
+    assert page.content == "body"
+
+
+def test_list_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "list_pages",
+        lambda: [
+            PageSummary(id=7, path="ideas/homeos", title="HomeOS", description=""),
+            PageSummary(id=8, path="ideas/homeos", title="HomeOS Duplicate", description=""),
+        ],
+    )
+    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly"):
+        client._find_page_summary_by_path_via_list("ideas/homeos")
 
 
 def test_upsert_page_creates_when_missing(monkeypatch):

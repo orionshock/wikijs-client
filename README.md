@@ -239,7 +239,7 @@ Already in place:
 - normalized result models (`PageSummary`, `PageDetail`, `PageTag`, `MutationResult`)
 - explicit separation between client transport, model objects, and CLI presentation
 - stable top-level Python API exports with basic tests locking the public surface
-- exact path lookup using targeted `pages.search(...)` plus exact client-side filtering
+- exact path lookup using targeted `pages.search(...)` plus exact client-side filtering, with `pages.list()` fallback when search misses an exact path
 - basic mutation safety around metadata preservation and dry-run support for move/delete
 - README coverage for command semantics, Python API shape, and compatibility assumptions
 - test coverage for core client behavior, CLI flows, and exported public API
@@ -253,7 +253,7 @@ Likely work:
 - add pagination controls for large wikis
 - add explicit sorting controls where the API supports them cleanly
 - evaluate whether exact-match or title/path helper queries can improve compatibility across more Wiki.js deployments
-- decide whether a list-based fallback for exact path lookup is worth keeping for compatibility
+- evaluate whether the current list-based fallback for exact path lookup should remain enabled by default across more Wiki.js deployments
 - validate locale configuration behavior across more Wiki.js deployments now that search locale can be supplied via `WIKIJS_LOCALE`
 
 #### Next milestone, richer mutation contracts
@@ -321,7 +321,7 @@ Failure modes handled explicitly now include:
 - non-JSON API responses
 - GraphQL error payloads
 - missing `data` payloads
-- ambiguous exact path matches during targeted search lookup
+- ambiguous exact path matches during targeted search or list fallback lookup
 - missing required env vars
 - file read errors during CLI content loading
 
@@ -330,7 +330,7 @@ Failure modes handled explicitly now include:
 - list output is currently unpaginated
 - list filtering happens client-side after fetching the page list
 - global text search depends on the current behavior and ranking of `pages.search(...)`
-- exact path lookup now prefers `pages.search(...)` plus exact client-side path filtering, so it still depends on current Wiki.js search behavior and schema stability
+- exact path lookup now prefers `pages.search(...)` plus exact client-side path filtering, then falls back to `pages.list()` plus exact client-side filtering when search misses
 - compatibility has been validated against one real Wiki.js environment so far, not a broad matrix of versions
 - mutation results are normalized, but the client still relies on a limited subset of the Wiki.js GraphQL schema
 
