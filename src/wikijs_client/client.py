@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import unicodedata
 from dataclasses import dataclass
 from typing import Any
@@ -166,10 +165,6 @@ class WikiJsClient:
             ids = ", ".join(str(page.id) for page in exact_matches)
             raise WikiJsError(f"Multiple pages matched path exactly via {source}: {path} (ids: {ids})")
         return exact_matches[0]
-
-    def _find_page_summary_by_path_via_list(self, path: str) -> PageSummary | None:
-        """Exact path lookup using pages.list() plus client-side filtering."""
-        return self._find_single_exact_match(self.list_pages(), path=path, source="pages.list")
 
     def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
         """Use pages.search for targeted path lookup with exact-match filtering."""

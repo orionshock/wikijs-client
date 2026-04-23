@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from wikijs_client.client import WikiJsClient, WikiJsError, WikiJsSchemaError
-from wikijs_client.models import MutationResult, PageDetail, PageSummary, PageTag
+from wikijs_client.models import MutationResult, PageDetail, PageTag
 
 
 class DummyResponse:
@@ -136,20 +136,6 @@ def test_list_pages_without_filters_uses_pages_list(monkeypatch):
     assert len(pages) == 1
     assert "list(orderBy: PATH)" in captured["query"]
     assert captured["variables"] is None
-
-
-def test_list_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
-    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(
-        client,
-        "list_pages",
-        lambda: [
-            PageSummary(id=7, path="ideas/homeos", title="HomeOS", description=""),
-            PageSummary(id=8, path="ideas/homeos", title="HomeOS Duplicate", description=""),
-        ],
-    )
-    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly via pages.list"):
-        client._find_page_summary_by_path_via_list("ideas/homeos")
 
 
 def test_upsert_page_creates_when_missing(monkeypatch):
