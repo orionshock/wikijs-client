@@ -176,7 +176,7 @@ Return-model expectations:
 
 - `MutationResult`
   - normalized mutation result payload
-  - fields: `action`, `succeeded`, `message`, `error_code`, optional `page`, optional `metadata`
+  - fields: `action`, `succeeded`, `message`, `error_code`, optional `page`, optional `previous_page`, optional `changed`, optional `metadata`
   - `.to_dict()` keeps the response shape stable for scripts and tools
 
 Stability notes:
@@ -262,10 +262,10 @@ Goal: make writes easier for scripts and agents to reason about.
 
 Likely work:
 
-- expand mutation result data so callers can reliably inspect what changed
 - consider validate-style or preview flows where feasible
 - improve conflict and schema-surprise reporting for missing pages, duplicate paths, or incompatible deployments
 - add more tests around metadata preservation and replacement edge cases
+- decide whether mutation result change summaries should grow into a more formal diff contract
 
 #### Next milestone, packaging and release discipline
 

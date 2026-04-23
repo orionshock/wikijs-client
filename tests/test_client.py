@@ -129,12 +129,21 @@ def test_upsert_page_creates_when_missing(monkeypatch):
     monkeypatch.setattr(
         client,
         "create_page",
-        lambda **kwargs: MutationResult(action="created", succeeded=True, message="Page created successfully.", error_code=0, page={"id": 1, "path": kwargs["path"], "title": kwargs["title"]}),
+        lambda **kwargs: MutationResult(
+            action="created",
+            succeeded=True,
+            message="Page created successfully.",
+            error_code=0,
+            page={"id": 1, "path": kwargs["path"], "title": kwargs["title"]},
+            changed={"created": True, "updated": False, "deleted": False},
+        ),
     )
 
     result = client.upsert_page(path="ideas/test", title="Test", content="# Test")
     assert result.action == "created"
     assert result.succeeded is True
+    assert result.changed["created"] is True
+    assert result.changed["updated"] is False
 
 
 def test_upsert_page_updates_when_existing(monkeypatch):
@@ -155,6 +164,25 @@ def test_upsert_page_updates_when_existing(monkeypatch):
     assert captured["tags"] == ["ideas"]
     assert result.metadata["description_preserved"] is True
     assert result.metadata["tags_preserved"] is True
+    assert result.previous_page == {
+        "id": 99,
+        "path": "ideas/test",
+        "title": "Old",
+        "description": "kept",
+        "tags": [{"tag": "ideas", "title": "ideas"}],
+    }
+    assert result.page == {
+        "id": 99,
+        "path": "ideas/test",
+        "title": "Test",
+        "description": "kept",
+        "tags": [{"tag": "ideas", "title": ""}],
+    }
+    assert result.changed["updated"] is True
+    assert result.changed["title"] is True
+    assert result.changed["description"] is False
+    assert result.changed["tags"] is False
+    assert result.changed["content"] is True
 
 
 def test_upsert_page_can_replace_description_and_tags(monkeypatch):
@@ -181,6 +209,8 @@ def test_upsert_page_can_replace_description_and_tags(monkeypatch):
     assert captured["tags"] == ["new", "tags"]
     assert result.metadata["description_preserved"] is False
     assert result.metadata["tags_preserved"] is False
+    assert result.changed["description"] is True
+    assert result.changed["tags"] is True
 
 
 def test_move_page_updates_path_and_preserves_existing_content(monkeypatch):
@@ -205,6 +235,9 @@ def test_move_page_updates_path_and_preserves_existing_content(monkeypatch):
     assert captured["content"] == "body"
     assert captured["description"] == "desc"
     assert captured["tags"] == ["notes"]
+    assert result.previous_page == {"id": 42, "path": "ideas/old", "title": "Old Title"}
+    assert result.changed["path"] is True
+    assert result.changed["title"] is False
 
 
 def test_move_page_raises_when_destination_exists(monkeypatch):
@@ -288,6 +321,29 @@ def test_delete_page_normalizes_path(monkeypatch):
     with pytest.raises(WikiJsError, match="No page found"):
         client.delete_page_by_path(" /ideas/missing/ ")
     assert seen["path"] == "ideas/missing"
+
+
+def test_delete_page_returns_previous_page_payload(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "get_page_by_path",
+        lambda path: PageDetail(id=3, path=path, title="Gone", content="body", description="desc", tags=[PageTag(tag="cleanup", title="Cleanup")]),
+    )
+
+    def fake_post(query, variables=None):
+        return {"pages": {"delete": {"responseResult": {"succeeded": True, "message": "deleted", "errorCode": 0}}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    result = client.delete_page_by_path("ideas/gone")
+    assert result.previous_page == {
+        "id": 3,
+        "path": "ideas/gone",
+        "title": "Gone",
+        "description": "desc",
+        "tags": [{"tag": "cleanup", "title": "Cleanup"}],
+    }
+    assert result.changed["deleted"] is True
 
 
 def test_update_page_rejects_zero_width_tag(monkeypatch):

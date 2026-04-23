@@ -276,6 +276,11 @@ class WikiJsClient:
             message=response.get("message") or "",
             error_code=response.get("errorCode"),
             page=result.get("page"),
+            changed={
+                "created": bool(response.get("succeeded")),
+                "updated": False,
+                "deleted": False,
+            },
         )
 
     def update_page(self, *, page_id: int, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
@@ -323,6 +328,12 @@ class WikiJsClient:
             succeeded=bool(response.get("succeeded")),
             message=response.get("message") or "",
             error_code=response.get("errorCode"),
+            page={"id": page_id, "path": path, "title": title},
+            changed={
+                "created": False,
+                "updated": bool(response.get("succeeded")),
+                "deleted": False,
+            },
         )
 
     def upsert_page(
@@ -356,12 +367,36 @@ class WikiJsClient:
                 description=resolved_description,
                 tags=resolved_tags,
             )
+            existing_tags_payload = [tag.to_dict() for tag in existing.tags]
+            updated_tags_payload = [{"tag": tag, "title": ""} for tag in resolved_tags]
             return MutationResult(
                 action="updated",
                 succeeded=result.succeeded,
                 message=result.message,
                 error_code=result.error_code,
-                page=result.page,
+                page={
+                    "id": existing.id,
+                    "path": path,
+                    "title": title,
+                    "description": resolved_description,
+                    "tags": updated_tags_payload,
+                },
+                previous_page={
+                    "id": existing.id,
+                    "path": existing.path,
+                    "title": existing.title,
+                    "description": existing.description,
+                    "tags": existing_tags_payload,
+                },
+                changed={
+                    "created": False,
+                    "updated": result.succeeded,
+                    "deleted": False,
+                    "title": existing.title != title,
+                    "description": existing.description != resolved_description,
+                    "tags": existing_tags != resolved_tags,
+                    "content": existing.content != content,
+                },
                 metadata={
                     "description_preserved": description is None and preserve_description,
                     "tags_preserved": tags is None and preserve_tags,
@@ -401,6 +436,14 @@ class WikiJsClient:
             message=result.message,
             error_code=result.error_code,
             page={"id": existing.id, "path": destination_path, "title": title or existing.title},
+            previous_page={"id": existing.id, "path": existing.path, "title": existing.title},
+            changed={
+                "created": False,
+                "updated": result.succeeded,
+                "deleted": False,
+                "path": existing.path != destination_path,
+                "title": existing.title != (title or existing.title),
+            },
             metadata={"source_path": source_path, "destination_path": destination_path},
         )
 
@@ -426,9 +469,22 @@ class WikiJsClient:
         data = self._post(mutation, {"id": existing.id})
         result = data["pages"]["delete"]
         response = result["responseResult"]
+        succeeded = bool(response.get("succeeded"))
         return MutationResult(
             action="deleted",
-            succeeded=bool(response.get("succeeded")),
+            succeeded=succeeded,
             message=response.get("message") or "",
             error_code=response.get("errorCode"),
+            previous_page={
+                "id": existing.id,
+                "path": existing.path,
+                "title": existing.title,
+                "description": existing.description,
+                "tags": [tag.to_dict() for tag in existing.tags],
+            },
+            changed={
+                "created": False,
+                "updated": False,
+                "deleted": succeeded,
+            },
         )

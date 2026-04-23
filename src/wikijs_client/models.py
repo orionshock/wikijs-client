@@ -79,6 +79,8 @@ class MutationResult:
     error_code: int | None = None
     page: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    previous_page: dict[str, Any] | None = None
+    changed: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -91,6 +93,10 @@ class MutationResult:
         }
         if self.page is not None:
             payload["page"] = self.page
+        if self.previous_page is not None:
+            payload["previousPage"] = self.previous_page
+        if self.changed:
+            payload["changed"] = self.changed
         if self.metadata:
             payload["metadata"] = self.metadata
         return payload

@@ -35,6 +35,7 @@ class DummyClient:
             succeeded=True,
             message="Page created successfully.",
             page={"path": kwargs["path"], "title": kwargs["title"]},
+            changed={"created": True, "updated": False, "deleted": False},
             metadata={
                 "description_preserved": kwargs.get("preserve_description"),
                 "tags_preserved": kwargs.get("preserve_tags"),
@@ -43,11 +44,17 @@ class DummyClient:
 
     def delete_page_by_path(self, path):
         self.deleted.append(path)
-        return MutationResult(action="deleted", succeeded=True, message="deleted")
+        return MutationResult(action="deleted", succeeded=True, message="deleted", changed={"created": False, "updated": False, "deleted": True})
 
     def move_page(self, *, source_path, destination_path, title=None):
         self.moved.append((source_path, destination_path, title))
-        return MutationResult(action="moved", succeeded=True, message="Page has been updated.", page={"path": destination_path, "title": title or "A"})
+        return MutationResult(
+            action="moved",
+            succeeded=True,
+            message="Page has been updated.",
+            page={"path": destination_path, "title": title or "A"},
+            changed={"created": False, "updated": True, "deleted": False, "path": True, "title": bool(title)},
+        )
 
 
 def test_cmd_list_filters_prefix(monkeypatch, capsys):
@@ -128,6 +135,7 @@ def test_cmd_delete(monkeypatch, capsys):
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["responseResult"]["succeeded"] is True
+    assert out["changed"]["deleted"] is True
     assert client.deleted == ["ideas/test"]
 
 
@@ -161,6 +169,8 @@ def test_cmd_move(monkeypatch, capsys):
     assert cli.cmd_move(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "moved"
+    assert out["changed"]["path"] is True
+    assert out["changed"]["title"] is False
     assert client.moved == [("ideas/a", "ideas/b", None)]
 
 
