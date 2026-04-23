@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import requests
 
-from wikijs_client.client import WikiJsClient, WikiJsError
+from wikijs_client.client import WikiJsClient, WikiJsError, WikiJsSchemaError
 from wikijs_client.models import MutationResult, PageDetail, PageSummary, PageTag
 
 
@@ -24,9 +24,7 @@ def test_get_page_by_path_returns_none_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
     def fake_post(query, variables=None):
-        if "search(path:" in query:
-            return {"pages": {"search": {"results": []}}}
-        return {"pages": {"list": []}}
+        return {"pages": {"search": {"results": []}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
     assert client.get_page_by_path("bar") is None
@@ -61,7 +59,6 @@ def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
         return None
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
-    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", lambda path: None)
     assert client.get_page_by_path(" /ideas/homeos/ ") is None
     assert seen["path"] == "ideas/homeos"
 
@@ -121,16 +118,14 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
         }
 
     monkeypatch.setattr(client, "_post", fake_post)
-    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly"):
+    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly via pages.search"):
         client._find_page_summary_by_path_via_search("ideas/homeos")
 
 
-def test_get_page_by_path_falls_back_to_list_lookup(monkeypatch):
-    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+def test_get_page_by_path_can_use_list_lookup_mode(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token", exact_path_lookup_mode="list")
 
     def fake_post(query, variables=None):
-        if "search(path:" in query:
-            return {"pages": {"search": {"results": []}}}
         if "list(orderBy: PATH)" in query:
             return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": "desc"}]}}
         return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": []}}}
@@ -152,7 +147,7 @@ def test_list_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
             PageSummary(id=8, path="ideas/homeos", title="HomeOS Duplicate", description=""),
         ],
     )
-    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly"):
+    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly via pages.list"):
         client._find_page_summary_by_path_via_list("ideas/homeos")
 
 
@@ -419,6 +414,26 @@ def test_post_rejects_missing_data_payload(monkeypatch):
 
     with pytest.raises(WikiJsError, match="did not include a data payload"):
         client._post("query { ping }")
+
+
+def test_search_pages_raises_schema_error_when_results_missing(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"pages": {"search": {}}})
+    with pytest.raises(WikiJsSchemaError, match="did not include pages.search.results"):
+        client.search_pages(query="homeos")
+
+
+def test_list_pages_raises_schema_error_when_list_missing(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"pages": {}})
+    with pytest.raises(WikiJsSchemaError, match="did not include pages.list"):
+        client.list_pages()
+
+
+def test_get_page_by_path_raises_on_invalid_lookup_mode():
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token", exact_path_lookup_mode="mystery")
+    with pytest.raises(WikiJsError, match="exact_path_lookup_mode must be 'search' or 'list'"):
+        client.get_page_by_path("ideas/homeos")
 
 
 def test_search_pages_uses_client_locale(monkeypatch):

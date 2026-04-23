@@ -228,10 +228,12 @@ def test_build_client_uses_optional_locale(monkeypatch):
     monkeypatch.setenv("WIKIJS_URL", "https://example.invalid/graphql")
     monkeypatch.setenv("WIKIJS_TOKEN", "secret")
     monkeypatch.setenv("WIKIJS_LOCALE", "fr")
+    monkeypatch.setenv("WIKIJS_EXACT_PATH_LOOKUP", "list")
     client = cli.build_client()
     assert client.url == "https://example.invalid/graphql"
     assert client.token == "secret"
     assert client.locale == "fr"
+    assert client.exact_path_lookup_mode == "list"
 
 
 def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):

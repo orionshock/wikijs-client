@@ -3,13 +3,14 @@
 Supported top-level imports are intentionally small and stable:
 - WikiJsClient
 - WikiJsError
+- WikiJsSchemaError
 - PageSummary
 - PageDetail
 - PageTag
 - MutationResult
 """
 
-__all__ = ["WikiJsClient", "WikiJsError", "MutationResult", "PageDetail", "PageSummary", "PageTag"]
+__all__ = ["WikiJsClient", "WikiJsError", "WikiJsSchemaError", "MutationResult", "PageDetail", "PageSummary", "PageTag"]
 
-from .client import WikiJsClient, WikiJsError
+from .client import WikiJsClient, WikiJsError, WikiJsSchemaError
 from .models import MutationResult, PageDetail, PageSummary, PageTag

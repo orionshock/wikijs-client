@@ -15,6 +15,10 @@ class WikiJsError(RuntimeError):
     """Raised when the Wiki.js API returns an unusable or failed response."""
 
 
+class WikiJsSchemaError(WikiJsError):
+    """Raised when the Wiki.js schema is missing fields or shapes the client expects."""
+
+
 KNOWN_BAD_INVISIBLES = {
     "\ufeff",
     "\u200b",
@@ -92,6 +96,7 @@ class WikiJsClient:
     token: str
     timeout: int = 30
     locale: str = "en"
+    exact_path_lookup_mode: str = "search"
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
@@ -142,27 +147,30 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(query)
-        return [PageSummary.from_api(item) for item in data["pages"]["list"]]
+        try:
+            data = self._post(query)
+            items = data["pages"]["list"]
+        except KeyError as exc:
+            raise WikiJsSchemaError("Wiki.js response did not include pages.list; this deployment may not support list-based browsing") from exc
+        return [PageSummary.from_api(item) for item in items]
 
-    def _find_page_summary_by_path_via_list(self, path: str) -> PageSummary | None:
-        """Fallback exact path lookup using pages.list() plus client-side filtering."""
-        exact_matches = [page for page in self.list_pages() if page.path == path]
-        if not exact_matches:
-            return None
-        if len(exact_matches) > 1:
-            raise WikiJsError(f"Multiple pages matched path exactly: {path}")
-        return exact_matches[0]
-
-    def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
-        """Use pages.search for targeted path lookup with exact-match filtering."""
-        results = self.search_pages(query="", path=path)
+    def _find_single_exact_match(self, results: list[PageSummary], *, path: str, source: str) -> PageSummary | None:
         exact_matches = [page for page in results if page.path == path]
         if not exact_matches:
             return None
         if len(exact_matches) > 1:
-            raise WikiJsError(f"Multiple pages matched path exactly: {path}")
+            ids = ", ".join(str(page.id) for page in exact_matches)
+            raise WikiJsError(f"Multiple pages matched path exactly via {source}: {path} (ids: {ids})")
         return exact_matches[0]
+
+    def _find_page_summary_by_path_via_list(self, path: str) -> PageSummary | None:
+        """Exact path lookup using pages.list() plus client-side filtering."""
+        return self._find_single_exact_match(self.list_pages(), path=path, source="pages.list")
+
+    def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
+        """Use pages.search for targeted path lookup with exact-match filtering."""
+        results = self.search_pages(query="", path=path)
+        return self._find_single_exact_match(results, path=path, source="pages.search")
 
     def search_pages(self, *, query: str, path: str = "") -> list[PageSummary]:
         """Search pages and return normalized PageSummary results.
@@ -195,8 +203,12 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(gql, {"path": path_value, "query": query_text, "locale": self.locale})
-        return [PageSummary.from_api(item) for item in data["pages"]["search"]["results"]]
+        try:
+            data = self._post(gql, {"path": path_value, "query": query_text, "locale": self.locale})
+            items = data["pages"]["search"]["results"]
+        except KeyError as exc:
+            raise WikiJsSchemaError("Wiki.js response did not include pages.search.results; this deployment may not support the expected search schema") from exc
+        return [PageSummary.from_api(item) for item in items]
 
     def _get_page_by_id(self, page_id: int) -> PageDetail:
         """Fetch a detailed page object by id."""
@@ -217,20 +229,32 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(query, {"id": page_id})
-        return PageDetail.from_api(data["pages"]["single"])
+        try:
+            data = self._post(query, {"id": page_id})
+            payload = data["pages"]["single"]
+        except KeyError as exc:
+            raise WikiJsSchemaError("Wiki.js response did not include pages.single; this deployment may not support the expected page detail schema") from exc
+        return PageDetail.from_api(payload)
 
     def get_page_by_path(self, path: str) -> PageDetail | None:
         """Return a detailed page by exact path, or None if it does not exist.
 
-        The path is normalized before lookup. Exact lookup currently prefers a
-        targeted `pages.search(...)` pass plus exact client-side filtering, followed
-        by `pages.single(id: ...)` for the full page payload.
+        The path is normalized before lookup. Exact lookup uses the configured
+        `exact_path_lookup_mode`:
+        - `search` (default): targeted `pages.search(...)` plus exact client-side filtering
+        - `list`: `pages.list()` plus exact client-side filtering
+
+        No fallback is applied implicitly; callers should choose the strategy they want.
         """
         path = _normalize_path(path)
-        match = self._find_page_summary_by_path_via_search(path)
-        if match is None:
+        if self.exact_path_lookup_mode == "search":
+            match = self._find_page_summary_by_path_via_search(path)
+        elif self.exact_path_lookup_mode == "list":
             match = self._find_page_summary_by_path_via_list(path)
+        else:
+            raise WikiJsError(
+                "exact_path_lookup_mode must be 'search' or 'list'"
+            )
         if match is None:
             return None
         return self._get_page_by_id(match.id)

@@ -17,9 +17,10 @@ def build_client() -> WikiJsClient:
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
     locale = os.environ.get("WIKIJS_LOCALE", "en")
+    exact_path_lookup_mode = os.environ.get("WIKIJS_EXACT_PATH_LOOKUP", "search")
     if not url or not token:
         raise WikiJsError("WIKIJS_URL and WIKIJS_TOKEN must be set")
-    return WikiJsClient(url=url, token=token, locale=locale)
+    return WikiJsClient(url=url, token=token, locale=locale, exact_path_lookup_mode=exact_path_lookup_mode)
 
 
 def emit(data: Any, *, as_json: bool) -> None:

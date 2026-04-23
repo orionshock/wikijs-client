@@ -68,6 +68,7 @@ Environment variables:
 - `WIKIJS_URL`
 - `WIKIJS_TOKEN`
 - `WIKIJS_LOCALE` (optional, default: `en`)
+- `WIKIJS_EXACT_PATH_LOOKUP` (optional, `search` or `list`, default: `search`)
 
 ## Python API
 
@@ -77,6 +78,7 @@ Top-level exports:
 from wikijs_client import (
     WikiJsClient,
     WikiJsError,
+    WikiJsSchemaError,
     PageSummary,
     PageDetail,
     PageTag,
@@ -102,9 +104,14 @@ Core return models:
 - `PageTag`: `tag`, `title`
 - `MutationResult`: `action`, `succeeded`, `message`, `error_code`, optional `page`, `previousPage`, `changed`, `metadata`
 
+Error types:
+
+- `WikiJsError`: request, validation, or operational failure
+- `WikiJsSchemaError`: the deployment responded, but did not expose the schema shape this client expected
+
 ## Notes
 
-- exact path lookup prefers targeted `pages.search(...)` and falls back to `pages.list()` when needed
+- exact path lookup is explicit: use `search` mode by default, or opt into `list` mode with `WIKIJS_EXACT_PATH_LOOKUP=list`
 - list filtering and pagination are currently client-side
 - compatibility has been validated against one real Wiki.js environment so far
 

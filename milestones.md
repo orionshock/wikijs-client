@@ -4,10 +4,8 @@ This file is the project scratchpad for future work.
 
 ## Near-term ideas
 
-- validate `WIKIJS_LOCALE` behavior across more Wiki.js deployments
-- evaluate whether the exact-path `pages.list()` fallback should stay enabled by default
-- evaluate whether exact-match or title/path helper queries can improve compatibility
-- improve conflict and schema-surprise reporting for missing pages, duplicate paths, or incompatible deployments
+- probe whether any Wiki.js deployments expose a more direct exact-match helper than the current `pages.search(...)` + exact client-side filtering
+- improve create/update/delete conflict reporting when the API returns richer duplicate-path or validation errors
 - add more tests around metadata preservation and replacement edge cases
 - decide whether `MutationResult.changed` should grow into a more formal diff contract
 
