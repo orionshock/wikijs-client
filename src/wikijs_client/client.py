@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unicodedata
 from dataclasses import dataclass
 from typing import Any
@@ -90,6 +91,7 @@ class WikiJsClient:
     url: str
     token: str
     timeout: int = 30
+    locale: str = "en"
 
     def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
@@ -172,9 +174,9 @@ class WikiJsClient:
         query_text = _reject_unsupported_chars(query.strip(), "query", strict=False)
         path_value = _normalize_path(path) if path.strip() else ""
         gql = """
-        query ($path: String!, $query: String!) {
+        query ($path: String!, $query: String!, $locale: String!) {
           pages {
-            search(path: $path, locale: "en", query: $query) {
+            search(path: $path, locale: $locale, query: $query) {
               results {
                 id
                 path
@@ -184,7 +186,7 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(gql, {"path": path_value, "query": query_text})
+        data = self._post(gql, {"path": path_value, "query": query_text, "locale": self.locale})
         return [PageSummary.from_api(item) for item in data["pages"]["search"]["results"]]
 
     def _get_page_by_id(self, page_id: int) -> PageDetail:

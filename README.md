@@ -117,6 +117,7 @@ Environment variables:
 
 - `WIKIJS_URL`
 - `WIKIJS_TOKEN`
+- `WIKIJS_LOCALE` (optional, defaults to `en`)
 
 ## Public Python API
 
@@ -253,7 +254,7 @@ Likely work:
 - add explicit sorting controls where the API supports them cleanly
 - evaluate whether exact-match or title/path helper queries can improve compatibility across more Wiki.js deployments
 - decide whether a list-based fallback for exact path lookup is worth keeping for compatibility
-- decide whether search locale should remain hardcoded to `en` or become configurable
+- validate locale configuration behavior across more Wiki.js deployments now that search locale can be supplied via `WIKIJS_LOCALE`
 
 #### Next milestone, richer mutation contracts
 

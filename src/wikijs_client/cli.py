@@ -16,9 +16,10 @@ def build_client() -> WikiJsClient:
     """Build a client from environment variables."""
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
+    locale = os.environ.get("WIKIJS_LOCALE", "en")
     if not url or not token:
         raise WikiJsError("WIKIJS_URL and WIKIJS_TOKEN must be set")
-    return WikiJsClient(url=url, token=token)
+    return WikiJsClient(url=url, token=token, locale=locale)
 
 
 def emit(data: Any, *, as_json: bool) -> None:

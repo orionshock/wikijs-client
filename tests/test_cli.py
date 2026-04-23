@@ -201,6 +201,16 @@ def test_main_reports_missing_env(capsys, monkeypatch):
     assert "WIKIJS_URL and WIKIJS_TOKEN must be set" in err
 
 
+def test_build_client_uses_optional_locale(monkeypatch):
+    monkeypatch.setenv("WIKIJS_URL", "https://example.invalid/graphql")
+    monkeypatch.setenv("WIKIJS_TOKEN", "secret")
+    monkeypatch.setenv("WIKIJS_LOCALE", "fr")
+    client = cli.build_client()
+    assert client.url == "https://example.invalid/graphql"
+    assert client.token == "secret"
+    assert client.locale == "fr"
+
+
 def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"

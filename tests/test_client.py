@@ -47,7 +47,7 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     assert page.content == "body"
     assert isinstance(page, PageDetail)
     assert len(calls) == 2
-    assert calls[0][1] == {"path": "ideas/homeos", "query": ""}
+    assert calls[0][1] == {"path": "ideas/homeos", "query": "", "locale": "en"}
     assert calls[1][1] == {"id": 7}
 
 
@@ -78,7 +78,7 @@ def test_search_pages_uses_search_query(monkeypatch):
     assert len(results) == 1
     assert results[0].path == "ideas/homeos"
     assert "search(path:" in captured["query"]
-    assert captured["variables"] == {"path": "", "query": "homeos"}
+    assert captured["variables"] == {"path": "", "query": "homeos", "locale": "en"}
 
 
 def test_search_lookup_filters_non_exact_matches(monkeypatch):
@@ -330,3 +330,17 @@ def test_post_rejects_missing_data_payload(monkeypatch):
 
     with pytest.raises(WikiJsError, match="did not include a data payload"):
         client._post("query { ping }")
+
+
+def test_search_pages_uses_client_locale(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token", locale="fr")
+    captured = {}
+
+    def fake_post(query, variables=None):
+        captured["query"] = query
+        captured["variables"] = variables
+        return {"pages": {"search": {"results": []}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    client.search_pages(query="bonjour")
+    assert captured["variables"] == {"path": "", "query": "bonjour", "locale": "fr"}
