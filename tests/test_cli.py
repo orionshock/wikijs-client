@@ -4,13 +4,23 @@ import json
 
 from wikijs_client import cli
 from wikijs_client.client import WikiJsError
-from wikijs_client.models import MutationResult, PageDetail, PageSummary
+from wikijs_client.models import MutationResult, PageDetail, PageSummary, SiteVersion
 
 
 class DummyClient:
     def __init__(self):
         self.deleted = []
         self.moved = []
+
+    def get_version(self, *, target_version=""):
+        return SiteVersion(
+            current_version="2.5.312",
+            latest_version="2.5.312",
+            latest_version_release_date="2026-02-11T00:00:00.000Z",
+            upgrade_capable=False,
+            target_version=target_version,
+            matches_target=None if not target_version else target_version == "2.5.312",
+        )
 
     def list_pages(self, *, query="", path=""):
         if query == "alpha":
@@ -58,6 +68,23 @@ class DummyClient:
             page={"path": destination_path, "title": title or "A"},
             changed={"created": False, "updated": True, "deleted": False, "path": True, "title": bool(title)},
         )
+
+
+def test_cmd_version_json(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(target_version="2.5.312", json=True)
+    assert cli.cmd_version(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["currentVersion"] == "2.5.312"
+    assert out["matchesTarget"] is True
+
+
+def test_cmd_version_warns_on_mismatch(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(target_version="2.5.999", json=False)
+    assert cli.cmd_version(args) == 0
+    out = capsys.readouterr().out
+    assert "warning: expected 2.5.999, got 2.5.312" in out
 
 
 def test_cmd_list_no_args_shows_all(monkeypatch, capsys):
@@ -204,6 +231,7 @@ def test_build_parser_includes_new_commands():
     list_help = parser._subparsers._group_actions[0].choices["list"].format_help()
     assert "search" in help_text
     assert "exists" in help_text
+    assert "version" in help_text
     assert "--query" in list_help
     assert "--path" in list_help
 

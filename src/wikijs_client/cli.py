@@ -56,6 +56,28 @@ def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
     print(f"\n{len(pages)} page(s)")
 
 
+def cmd_version(args: argparse.Namespace) -> int:
+    client = build_client()
+    version = client.get_version(target_version=args.target_version or "")
+    payload = version.to_dict()
+    if args.json:
+        emit(payload, as_json=True)
+    else:
+        print(f"current: {payload['currentVersion'] or 'unknown'}")
+        if payload["latestVersion"]:
+            print(f"latest: {payload['latestVersion']}")
+        if payload["latestVersionReleaseDate"]:
+            print(f"latest release: {payload['latestVersionReleaseDate']}")
+        if payload["upgradeCapable"] is not None:
+            print(f"upgrade capable: {payload['upgradeCapable']}")
+        if payload["targetVersion"]:
+            if payload["matchesTarget"]:
+                print(f"target: {payload['targetVersion']} (match)")
+            else:
+                print(f"warning: expected {payload['targetVersion']}, got {payload['currentVersion'] or 'unknown'}")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     client = build_client()
     pages = client.list_pages(query=args.query or "", path=args.path or "")
@@ -181,6 +203,15 @@ def build_parser() -> argparse.ArgumentParser:
         description="Practical Wiki.js GraphQL CLI with separate commands for exact existence checks, global search, and predictable list-based browsing.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p_version = sub.add_parser(
+        "version",
+        help="show Wiki.js version info",
+        description="Query Wiki.js system info and optionally warn when the current version does not match a target version.",
+    )
+    p_version.add_argument("--target-version", help="expected Wiki.js version; emits a warning when the current version differs")
+    p_version.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
+    p_version.set_defaults(func=cmd_version)
 
     p_list = sub.add_parser(
         "list",

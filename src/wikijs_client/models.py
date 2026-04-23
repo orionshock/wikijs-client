@@ -70,6 +70,45 @@ class PageDetail:
 
 
 @dataclass(frozen=True)
+class SiteVersion:
+    """Compact version/status view returned by Wiki.js system info queries."""
+
+    current_version: str = ""
+    latest_version: str = ""
+    latest_version_release_date: str = ""
+    upgrade_capable: bool | None = None
+    target_version: str = ""
+    matches_target: bool | None = None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any], *, target_version: str = "") -> "SiteVersion":
+        current_version = data.get("currentVersion") or ""
+        latest_version = data.get("latestVersion") or ""
+        latest_version_release_date = data.get("latestVersionReleaseDate") or ""
+        upgrade_capable = data.get("upgradeCapable")
+        target_version = target_version.strip()
+        matches_target = None if not target_version else current_version == target_version
+        return cls(
+            current_version=current_version,
+            latest_version=latest_version,
+            latest_version_release_date=latest_version_release_date,
+            upgrade_capable=upgrade_capable,
+            target_version=target_version,
+            matches_target=matches_target,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "currentVersion": self.current_version,
+            "latestVersion": self.latest_version,
+            "latestVersionReleaseDate": self.latest_version_release_date,
+            "upgradeCapable": self.upgrade_capable,
+            "targetVersion": self.target_version,
+            "matchesTarget": self.matches_target,
+        }
+
+
+@dataclass(frozen=True)
 class MutationResult:
     """Normalized mutation result with optional metadata for human/automation output."""
 

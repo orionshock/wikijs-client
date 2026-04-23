@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from .models import MutationResult, PageDetail, PageSummary
+from .models import MutationResult, PageDetail, PageSummary, SiteVersion
 
 
 class WikiJsError(RuntimeError):
@@ -93,6 +93,7 @@ class WikiJsClient:
     """Minimal Wiki.js GraphQL client focused on practical page operations.
 
     Public methods are intended to be reusable by scripts, tools, and future adapters:
+    - get_version(target_version="")
     - list_pages()
     - search_pages(query, path="")
     - get_page_by_path(path)
@@ -178,6 +179,27 @@ class WikiJsClient:
         if data is None:
             raise WikiJsError("Wiki.js response did not include a data payload")
         return data
+
+    def get_version(self, *, target_version: str = "") -> SiteVersion:
+        """Return current Wiki.js version info, optionally compared to a target version."""
+        gql = """
+        query {
+          system {
+            info {
+              currentVersion
+              latestVersion
+              latestVersionReleaseDate
+              upgradeCapable
+            }
+          }
+        }
+        """
+        try:
+            data = self._post(gql)
+            payload = data["system"]["info"]
+        except KeyError as exc:
+            raise WikiJsSchemaError("Wiki.js response did not include system.info; this deployment may not expose version info") from exc
+        return SiteVersion.from_api(payload, target_version=target_version)
 
     def list_pages(self, *, query: str = "", path: str = "") -> list[PageSummary]:
         """Return pages as normalized PageSummary objects.

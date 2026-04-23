@@ -122,6 +122,25 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
         client._find_page_summary_by_path_via_search("ideas/homeos")
 
 
+def test_get_version_returns_system_info(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None):
+        return {"system": {"info": {"currentVersion": "2.5.312", "latestVersion": "2.5.312", "latestVersionReleaseDate": "2026-02-11T00:00:00.000Z", "upgradeCapable": False}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    version = client.get_version(target_version="2.5.312")
+    assert version.current_version == "2.5.312"
+    assert version.matches_target is True
+
+
+def test_get_version_raises_schema_error_when_missing(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"system": {}})
+    with pytest.raises(WikiJsSchemaError, match="did not include system.info"):
+        client.get_version()
+
+
 def test_list_pages_without_filters_uses_pages_list(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     captured = {}
