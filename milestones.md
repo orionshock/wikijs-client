@@ -8,7 +8,6 @@ This file is the project scratchpad for future work.
 
 ## Possible feature work
 
-- explicit sorting controls for `list` where the API supports them cleanly = NO
 - validate-style or preview flows for mutations where feasible
 - lightweight versioning and release discipline once the API shape settles
 

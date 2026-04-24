@@ -2,6 +2,27 @@
 
 A small Python CLI and library for practical Wiki.js GraphQL page operations.
 
+This repo is being prepared for two parallel uses:
+- local development and source-of-truth hosting in Gitea
+- GitHub mirroring for public visibility and Python package publishing
+
+## Installation
+
+### From source
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
+```
+
+### Build distributable artifacts
+
+```bash
+python -m build
+python -m twine check dist/*
+```
+
 ## What it does
 
 - exact page existence checks by path
@@ -134,6 +155,15 @@ Error types:
 - `list` uses `pages.list()` with no filters, and `pages.search(...)` when `--query` or `--path` is used
 - compatibility has been validated against one real Wiki.js environment so far
 
+## Release prep notes
+
+For a GitHub mirror + pip publishing flow, the repo should have:
+- a GitHub remote or push target
+- package metadata in `pyproject.toml`
+- build verification via `python -m build`
+- metadata verification via `python -m twine check dist/*`
+- a release workflow (typically GitHub Actions) for tagged releases
+
 ## Development
 
 ```bash
@@ -141,4 +171,6 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 pytest -q
+python -m build
+python -m twine check dist/*
 ```

@@ -12,20 +12,35 @@ dependencies = [
   "requests>=2.31,<3",
 ]
 authors = [
-  { name = "NewCapricaOpenClaw" }
+  { name = "NewCapricaOpenClaw", email = "openclaw+orionshock@gmail.com" }
 ]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["wikijs", "graphql", "cli", "wiki"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NewCapricaOpenClaw/wikijs-client"
+Repository = "https://github.com/NewCapricaOpenClaw/wikijs-client"
+Issues = "https://github.com/NewCapricaOpenClaw/wikijs-client/issues"
 
 [project.optional-dependencies]
 dev = [
+  "build>=1.2,<2",
   "pytest>=8,<9",
+  "twine>=5,<6",
 ]
 
 [project.scripts]
@@ -33,6 +48,10 @@ wikijs-client = "wikijs_client.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
