@@ -2,30 +2,9 @@
 
 A small Python CLI and library for practical Wiki.js GraphQL page operations.
 
-This repo is being prepared for two parallel uses:
-- local development and source-of-truth hosting in Gitea
-- GitHub mirroring for public visibility and Python package publishing
-
-## Installation
-
-### From source
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
-```
-
-### Build distributable artifacts
-
-```bash
-python -m build
-python -m twine check dist/*
-```
-
 ## What it does
 
-- exact page existence checks by path
+- exact path checks
 - global text search
 - predictable page listing
 - page reads by exact path
@@ -34,39 +13,118 @@ python -m twine check dist/*
 - optional delete
 - script-friendly JSON output
 
-## Top-level flags
-
-- `--versioncheck`
-  - checks the server version against the project target: `2.5.312`
-  - warns when the server version differs
-
 ## Commands
 
-- `exists`
-- `search`
-- `get`
-- `list`
-- `upsert`
-- `move`
-- `delete`
+### Global options
 
-## Command semantics
+- `--versioncheck`
+  - check the server version against the project target (`2.5.312`)
+- `--json`
+  - emit structured JSON instead of human-readable output for `--versioncheck`
 
-- `exists PATH`
-  - exact path presence check
-  - exits non-zero when the page is missing
+### `list`
 
-- `search TEXT`
-  - global text search via Wiki.js `pages.search(path="", query=TEXT)`
-  - best when you know a word or phrase but not the page path
+List pages for browsing or server-backed discovery.
 
-- `list`
-  - with no flags, shows the full `pages.list()` inventory
-  - with `--query`, passes text into Wiki.js search
-  - with `--path`, scopes Wiki.js search by path
-  - `--regex` is an optional local post-filter over returned rows
+Use `--query` to pass text into Wiki.js search, `--path` to scope search by path, and `--regex` for optional local post-filtering.
 
-`move` and `delete` support `--dry-run`.
+Flags:
+- `--query QUERY`
+  - text to pass to Wiki.js search query
+- `--path PATH`
+  - path to pass to Wiki.js search for scoped discovery
+- `--regex REGEX`
+  - regular expression filter across returned path, title, and description
+- `--json`
+  - emit structured JSON instead of a table
+
+### `search`
+
+Search pages globally by text using Wiki.js search results.
+
+This is the preferred global text search command when you want ranked search results rather than full-wiki list filtering.
+
+Arguments and flags:
+- `text`
+  - search text to send to Wiki.js search
+- `--json`
+  - emit structured JSON instead of a table
+
+### `exists`
+
+Check whether a page exists at an exact path.
+
+This is intended for machine-friendly existence checks.
+
+Arguments and flags:
+- `path`
+  - exact page path to check
+- `--json`
+  - emit structured JSON instead of human-readable output
+
+### `get`
+
+Fetch page content by exact path.
+
+Arguments and flags:
+- `path`
+  - exact page path to fetch
+- `--json`
+  - emit structured JSON instead of raw page content
+
+### `upsert`
+
+Create a page when it does not exist, or update it when it does.
+
+Arguments:
+- `path`
+  - page path to create or update
+- `title`
+  - page title to create or set
+
+Flags:
+- `--file FILE`
+  - read page content from a file instead of stdin
+- `--description DESCRIPTION`
+  - set page description
+- `--tags [TAGS ...]`
+  - set page tags
+- `--replace-description`
+  - replace existing description instead of preserving it when omitted
+- `--replace-tags`
+  - replace existing tags instead of preserving them when omitted
+- `--json`
+  - emit structured JSON
+
+### `move`
+
+Move a page to a new path, optionally changing the title.
+
+Arguments:
+- `source_path`
+  - existing page path
+- `destination_path`
+  - new page path
+
+Flags:
+- `--title TITLE`
+  - optional new title; defaults to the existing title
+- `--dry-run`
+  - preview the move without applying it
+- `--json`
+  - emit structured JSON
+
+### `delete`
+
+Delete a page by exact path.
+
+Arguments and flags:
+- `path`
+  - exact page path to delete
+- `--dry-run`
+  - preview the delete without applying it
+- `--json`
+  - emit structured JSON
 
 ## Usage examples
 
@@ -87,13 +145,6 @@ wikijs-client move docs/scratch docs/reference --title 'Reference Page'
 wikijs-client delete docs/scratch --dry-run
 ```
 
-## Metadata behavior
-
-`upsert` preserves existing description and tags on update unless you explicitly replace them:
-
-- `--replace-description`
-- `--replace-tags`
-
 ## Configuration
 
 Environment variables:
@@ -102,67 +153,25 @@ Environment variables:
 - `WIKIJS_TOKEN`
 - `WIKIJS_LOCALE` (optional, default: `en`)
 
-## Python API
+## Installation
 
-Top-level exports:
+### Install with pip
 
-```python
-from wikijs_client import (
-    WikiJsClient,
-    WikiJsError,
-    WikiJsSchemaError,
-    WikiJsConflictError,
-    WikiJsValidationError,
-    PageSummary,
-    SiteVersion,
-    PageDetail,
-    PageTag,
-    MutationResult,
-)
+```bash
+pip install wikijs-client
 ```
 
-Supported public client methods:
+### Development install
 
-- `get_version(target_version: str = "") -> SiteVersion`
-- `list_pages() -> list[PageSummary]`
-- `search_pages(query: str, path: str = "") -> list[PageSummary]`
-- `get_page_by_path(path: str) -> PageDetail | None`
-- `create_page(...) -> MutationResult`
-- `update_page(...) -> MutationResult`
-- `upsert_page(...) -> MutationResult`
-- `move_page(...) -> MutationResult`
-- `delete_page_by_path(path: str) -> MutationResult`
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
+```
 
-Core return models:
+## Python API
 
-- `PageSummary`: `id`, `path`, `title`, `description`
-- `PageDetail`: `id`, `path`, `title`, `content`, `description`, `tags`
-- `PageTag`: `tag`, `title`
-- `SiteVersion`: `currentVersion`, `latestVersion`, `latestVersionReleaseDate`, `upgradeCapable`, optional target comparison fields
-- `MutationResult`: `action`, `succeeded`, `message`, `error_code`, optional `page`, `previousPage`, `changed`, `metadata`
-
-Error types:
-
-- `WikiJsError`: request or general operational failure
-- `WikiJsSchemaError`: the deployment responded, but did not expose the schema shape this client expected
-- `WikiJsConflictError`: a mutation failed due to a duplicate path or similar collision
-- `WikiJsValidationError`: a mutation failed validation and should be fixed before retrying
-
-## Notes
-
-- exact path lookup uses targeted `pages.search(...)` plus exact client-side filtering
-- `--versioncheck` queries `system.info` only when asked; there is no per-call version check tax
-- `list` uses `pages.list()` with no filters, and `pages.search(...)` when `--query` or `--path` is used
-- compatibility has been validated against one real Wiki.js environment so far
-
-## Release prep notes
-
-For a GitHub mirror + pip publishing flow, the repo should have:
-- a GitHub remote or push target
-- package metadata in `pyproject.toml`
-- build verification via `python -m build`
-- metadata verification via `python -m twine check dist/*`
-- a release workflow (typically GitHub Actions) for tagged releases
+The supported Python API docs live in `docs/python-api.md` and can be moved into the GitHub wiki if you want to keep the README CLI-focused.
 
 ## Development
 
@@ -172,5 +181,6 @@ python3 -m venv .venv
 pip install -e '.[dev]'
 pytest -q
 python -m build
-python -m twine check dist/*
+python -m twine check dist/*.tar.gz
+python -m twine check --ignore-unrecognized dist/*.whl
 ```
