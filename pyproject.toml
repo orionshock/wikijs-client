@@ -12,7 +12,7 @@ dependencies = [
   "requests>=2.31,<3",
 ]
 authors = [
-  { name = "NewCapricaOpenClaw", email = "openclaw+orionshock@gmail.com" }
+  { name = "Orion Shockman", email = "orionshock@gmail.com" }
 ]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -31,9 +31,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/NewCapricaOpenClaw/wikijs-client"
-Repository = "https://github.com/NewCapricaOpenClaw/wikijs-client"
-Issues = "https://github.com/NewCapricaOpenClaw/wikijs-client/issues"
+Homepage = "https://github.com/orionshock/wikijs-client"
+Repository = "https://github.com/orionshock/wikijs-client"
+Issues = "https://github.com/orionshock/wikijs-client/issues"
 
 [project.optional-dependencies]
 dev = [
