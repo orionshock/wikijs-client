@@ -38,16 +38,16 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     def fake_post(query, variables=None):
         calls.append((query, variables))
         if "search(path:" in query:
-            return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
-        return {"pages": {"single": {"id": 7, "path": "ideas/homeos", "title": "HomeOS", "content": "body", "description": "desc", "tags": [{"tag": "ideas", "title": "ideas"}]}}}
+            return {"pages": {"search": {"results": [{"id": 7, "path": "docs/example-page", "title": "Example Page"}]}}}
+        return {"pages": {"single": {"id": 7, "path": "docs/example-page", "title": "Example Page", "content": "body", "description": "desc", "tags": [{"tag": "docs", "title": "docs"}]}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
-    page = client.get_page_by_path("ideas/homeos")
+    page = client.get_page_by_path("docs/example-page")
     assert page is not None
     assert page.content == "body"
     assert isinstance(page, PageDetail)
     assert len(calls) == 2
-    assert calls[0][1] == {"path": "ideas/homeos", "query": "", "locale": "en"}
+    assert calls[0][1] == {"path": "docs/example-page", "query": "", "locale": "en"}
     assert calls[1][1] == {"id": 7}
 
 
@@ -55,52 +55,52 @@ def test_get_page_by_path_falls_back_to_list_when_search_id_is_stale(monkeypatch
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
     def fake_search(path):
-        return PageSummary(id=37, path=path, title="HomeOS", description="")
+        return PageSummary(id=37, path=path, title="Example Page", description="")
 
     def fake_list(path):
-        return PageSummary(id=38, path=path, title="HomeOS", description="")
+        return PageSummary(id=38, path=path, title="Example Page", description="")
 
     def fake_get(page_id):
         if page_id == 37:
             raise WikiJsError("GraphQL error(s): This page does not exist.")
         if page_id == 38:
-            return PageDetail(id=38, path="ideas/homeos", title="HomeOS", content="body", description="", tags=[])
+            return PageDetail(id=38, path="docs/example-page", title="Example Page", content="body", description="", tags=[])
         raise AssertionError(page_id)
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", fake_list)
     monkeypatch.setattr(client, "_get_page_by_id", fake_get)
 
-    page = client.get_page_by_path("ideas/homeos")
+    page = client.get_page_by_path("docs/example-page")
     assert page is not None
     assert page.id == 38
-    assert page.path == "ideas/homeos"
+    assert page.path == "docs/example-page"
 
 
 def test_get_page_by_path_falls_back_to_list_when_search_returns_wrong_page_id(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
     def fake_search(path):
-        return PageSummary(id=25, path=path, title="Why Universal USB-C Onboarding matters", description="")
+        return PageSummary(id=25, path=path, title="Target Page", description="")
 
     def fake_list(path):
-        return PageSummary(id=41, path=path, title="Why Universal USB-C Onboarding matters", description="")
+        return PageSummary(id=41, path=path, title="Target Page", description="")
 
     def fake_get(page_id):
         if page_id == 25:
-            return PageDetail(id=25, path="ideas/primitive-electromechanical-control-bridge", title="Primitive Electromechanical Control Bridge", content="body", description="", tags=[])
+            return PageDetail(id=25, path="docs/wrong-page", title="Wrong Page", content="body", description="", tags=[])
         if page_id == 41:
-            return PageDetail(id=41, path="ideas/universal-usbc-onboarding/why-this-matters", title="Why Universal USB-C Onboarding matters", content="right body", description="", tags=[])
+            return PageDetail(id=41, path="docs/target-page", title="Target Page", content="right body", description="", tags=[])
         raise AssertionError(page_id)
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", fake_list)
     monkeypatch.setattr(client, "_get_page_by_id", fake_get)
 
-    page = client.get_page_by_path("ideas/universal-usbc-onboarding/why-this-matters")
+    page = client.get_page_by_path("docs/target-page")
     assert page is not None
     assert page.id == 41
-    assert page.path == "ideas/universal-usbc-onboarding/why-this-matters"
+    assert page.path == "docs/target-page"
 
 
 def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
@@ -113,8 +113,8 @@ def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", lambda path: None)
-    assert client.get_page_by_path(" /ideas/homeos/ ") is None
-    assert seen["path"] == "ideas/homeos"
+    assert client.get_page_by_path(" /docs/example-page/ ") is None
+    assert seen["path"] == "docs/example-page"
 
 
 def test_search_pages_uses_search_query(monkeypatch):
@@ -124,14 +124,14 @@ def test_search_pages_uses_search_query(monkeypatch):
     def fake_post(query, variables=None):
         captured["query"] = query
         captured["variables"] = variables
-        return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
+        return {"pages": {"search": {"results": [{"id": 7, "path": "docs/example-page", "title": "Example Page"}]}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
-    results = client.search_pages(query="homeos")
+    results = client.search_pages(query="example")
     assert len(results) == 1
-    assert results[0].path == "ideas/homeos"
+    assert results[0].path == "docs/example-page"
     assert "search(path:" in captured["query"]
-    assert captured["variables"] == {"path": "", "query": "homeos", "locale": "en"}
+    assert captured["variables"] == {"path": "", "query": "example", "locale": "en"}
 
 
 def test_search_lookup_filters_non_exact_matches(monkeypatch):
@@ -142,18 +142,18 @@ def test_search_lookup_filters_non_exact_matches(monkeypatch):
             "pages": {
                 "search": {
                     "results": [
-                        {"id": 1, "path": "ideas/homeos-old", "title": "Old"},
-                        {"id": 7, "path": "ideas/homeos", "title": "HomeOS"},
+                        {"id": 1, "path": "docs/example-page-old", "title": "Old"},
+                        {"id": 7, "path": "docs/example-page", "title": "Example Page"},
                     ]
                 }
             }
         }
 
     monkeypatch.setattr(client, "_post", fake_post)
-    match = client._find_page_summary_by_path_via_search("ideas/homeos")
+    match = client._find_page_summary_by_path_via_search("docs/example-page")
     assert match is not None
     assert match.id == 7
-    assert match.path == "ideas/homeos"
+    assert match.path == "docs/example-page"
 
 
 def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
@@ -164,8 +164,8 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
             "pages": {
                 "search": {
                     "results": [
-                        {"id": 7, "path": "ideas/homeos", "title": "HomeOS"},
-                        {"id": 8, "path": "ideas/homeos", "title": "HomeOS Duplicate"},
+                        {"id": 7, "path": "docs/example-page", "title": "Example Page"},
+                        {"id": 8, "path": "docs/example-page", "title": "Example Page Duplicate"},
                     ]
                 }
             }
@@ -173,7 +173,7 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
 
     monkeypatch.setattr(client, "_post", fake_post)
     with pytest.raises(WikiJsError, match="Multiple pages matched path exactly via pages.search"):
-        client._find_page_summary_by_path_via_search("ideas/homeos")
+        client._find_page_summary_by_path_via_search("docs/example-page")
 
 
 def test_get_version_returns_system_info(monkeypatch):

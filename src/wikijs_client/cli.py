@@ -25,10 +25,9 @@ def build_client() -> WikiJsClient:
     return WikiJsClient(url=url, token=token, locale=locale)
 
 
-def emit(data: Any, *, as_json: bool) -> None:
-    """Emit structured output when JSON mode is requested."""
-    if as_json:
-        print(json.dumps(data, indent=2))
+def emit(data: Any) -> None:
+    """Emit structured JSON output."""
+    print(json.dumps(data, indent=2))
 
 
 def truncate(value: str, width: int) -> str:
@@ -50,7 +49,7 @@ def render_page_row(page: PageSummary) -> str:
 def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
     """Render page summaries as JSON or a compact human-readable table."""
     if as_json:
-        emit([page.to_dict() for page in pages], as_json=True)
+        emit([page.to_dict() for page in pages])
         return
     print(f"{'ID':>5}  {'PATH':<42}  {'TITLE':<28}  DESCRIPTION")
     print(f"{'-' * 5}  {'-' * 42}  {'-' * 28}  {'-' * 36}")
@@ -64,7 +63,7 @@ def run_versioncheck(*, as_json: bool) -> int:
     version = client.get_version(target_version=TARGET_WIKIJS_VERSION)
     payload = version.to_dict()
     if as_json:
-        emit(payload, as_json=True)
+        emit(payload)
     else:
         print(f"current: {payload['currentVersion'] or 'unknown'}")
         print(f"target: {payload['targetVersion']}")
@@ -103,7 +102,7 @@ def cmd_exists(args: argparse.Namespace) -> int:
     page = client.get_page_by_path(args.path)
     exists = page is not None
     if args.json:
-        emit({"path": args.path, "exists": exists}, as_json=True)
+        emit({"path": args.path, "exists": exists})
     else:
         print(f"exists: {args.path}" if exists else f"missing: {args.path}")
     return 0 if exists else 1
@@ -116,7 +115,7 @@ def cmd_get(args: argparse.Namespace) -> int:
         print(f"No page found at path: {args.path}", file=sys.stderr)
         return 1
     if args.json:
-        emit(page.to_dict(), as_json=True)
+        emit(page.to_dict())
     else:
         print(page.content)
     return 0
@@ -138,7 +137,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         preserve_tags=not args.replace_tags,
     )
     if args.json:
-        emit(result.to_dict(), as_json=True)
+        emit(result.to_dict())
     else:
         result_payload = result.to_dict()
         response = result_payload.get("responseResult", {})
@@ -162,13 +161,13 @@ def cmd_delete(args: argparse.Namespace) -> int:
             "path": args.path,
         }
         if args.json:
-            emit(payload, as_json=True)
+            emit(payload)
         else:
             print(f"dry-run: delete {args.path}")
         return 0
     result = client.delete_page_by_path(args.path)
     if args.json:
-        emit(result.to_dict(), as_json=True)
+        emit(result.to_dict())
     else:
         response = result.to_dict().get("responseResult", {})
         print(f"deleted: {args.path} ({response.get('message', 'ok')})")
@@ -186,14 +185,14 @@ def cmd_move(args: argparse.Namespace) -> int:
             "title": args.title,
         }
         if args.json:
-            emit(payload, as_json=True)
+            emit(payload)
         else:
             title_note = f" with title {args.title!r}" if args.title else ""
             print(f"dry-run: move {args.source_path} -> {args.destination_path}{title_note}")
         return 0
     result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
     if args.json:
-        emit(result.to_dict(), as_json=True)
+        emit(result.to_dict())
     else:
         response = result.to_dict().get("responseResult", {})
         print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')})")
@@ -232,13 +231,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_exists = sub.add_parser(
         "exists",
         help="check whether a page exists at an exact path",
-        description="Check whether a page exists at an exact path. This uses targeted path lookup rather than full-wiki listing and is intended for machine-friendly existence checks.",
+        description="Check whether a page exists at an exact path. This prefers targeted lookup, but verifies exact matches safely and falls back to full page listing when Wiki.js search results are stale or inconsistent.",
     )
     p_exists.add_argument("path", help="exact page path to check")
     p_exists.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
     p_exists.set_defaults(func=cmd_exists)
 
-    p_get = sub.add_parser("get", help="fetch page content by exact path")
+    p_get = sub.add_parser(
+        "get",
+        help="fetch page content by exact path",
+        description="Fetch page content by exact path using the same verified exact-path lookup flow as the exists command.",
+    )
     p_get.add_argument("path")
     p_get.add_argument("--json", action="store_true")
     p_get.set_defaults(func=cmd_get)
