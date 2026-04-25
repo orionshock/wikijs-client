@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wikijs-client"
-version = "0.1.1"
+version = "0.1.2"
 description = "A small Python CLI and library for practical Wiki.js GraphQL page operations"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

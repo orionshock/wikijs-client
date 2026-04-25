@@ -245,6 +245,14 @@ class WikiJsClient:
         results = self.search_pages(query="", path=path)
         return self._find_single_exact_match(results, path=path, source="pages.search")
 
+    def _find_page_summary_by_path_via_list(self, path: str) -> PageSummary | None:
+        """Use pages.list for deterministic exact-path lookup.
+
+        This is a safer fallback when Wiki.js search returns stale or mismatched ids.
+        """
+        pages = self.list_pages()
+        return self._find_single_exact_match(pages, path=path, source="pages.list")
+
     def search_pages(self, *, query: str, path: str = "") -> list[PageSummary]:
         """Search pages and return normalized PageSummary results.
 
@@ -312,15 +320,37 @@ class WikiJsClient:
     def get_page_by_path(self, path: str) -> PageDetail | None:
         """Return a detailed page by exact path, or None if it does not exist.
 
-        The path is normalized before lookup. Exact lookup uses targeted
-        `pages.search(...)` plus exact client-side filtering, followed by
-        `pages.single(id: ...)` for the full page payload.
+        The path is normalized before lookup. Exact lookup tries targeted
+        `pages.search(...)` first, but falls back to `pages.list()` when search
+        yields stale ids or mismatched page payloads.
         """
         path = _normalize_path(path)
         match = self._find_page_summary_by_path_via_search(path)
         if match is None:
-            return None
-        return self._get_page_by_id(match.id)
+            match = self._find_page_summary_by_path_via_list(path)
+            if match is None:
+                return None
+
+        try:
+            page = self._get_page_by_id(match.id)
+        except WikiJsError:
+            fallback = self._find_page_summary_by_path_via_list(path)
+            if fallback is None or fallback.id == match.id:
+                raise
+            return self._get_page_by_id(fallback.id)
+
+        if page.path != path:
+            fallback = self._find_page_summary_by_path_via_list(path)
+            if fallback is None:
+                return None
+            if fallback.id != match.id:
+                page = self._get_page_by_id(fallback.id)
+                if page.path != path:
+                    raise WikiJsError(f"Exact path lookup resolved to unexpected page path: requested {path}, got {page.path}")
+            else:
+                raise WikiJsError(f"Exact path lookup resolved to unexpected page path: requested {path}, got {page.path}")
+
+        return page
 
     def create_page(self, *, path: str, title: str, content: str, description: str = "", tags: list[str] | None = None) -> MutationResult:
         """Create a page and return a normalized MutationResult.

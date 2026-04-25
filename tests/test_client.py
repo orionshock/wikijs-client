@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from wikijs_client.client import WikiJsClient, WikiJsConflictError, WikiJsError, WikiJsSchemaError, WikiJsValidationError
-from wikijs_client.models import MutationResult, PageDetail, PageTag
+from wikijs_client.models import MutationResult, PageDetail, PageSummary, PageTag
 
 
 class DummyResponse:
@@ -27,6 +27,7 @@ def test_get_page_by_path_returns_none_when_missing(monkeypatch):
         return {"pages": {"search": {"results": []}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", lambda path: None)
     assert client.get_page_by_path("bar") is None
 
 
@@ -50,6 +51,58 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     assert calls[1][1] == {"id": 7}
 
 
+def test_get_page_by_path_falls_back_to_list_when_search_id_is_stale(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_search(path):
+        return PageSummary(id=37, path=path, title="HomeOS", description="")
+
+    def fake_list(path):
+        return PageSummary(id=38, path=path, title="HomeOS", description="")
+
+    def fake_get(page_id):
+        if page_id == 37:
+            raise WikiJsError("GraphQL error(s): This page does not exist.")
+        if page_id == 38:
+            return PageDetail(id=38, path="ideas/homeos", title="HomeOS", content="body", description="", tags=[])
+        raise AssertionError(page_id)
+
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", fake_list)
+    monkeypatch.setattr(client, "_get_page_by_id", fake_get)
+
+    page = client.get_page_by_path("ideas/homeos")
+    assert page is not None
+    assert page.id == 38
+    assert page.path == "ideas/homeos"
+
+
+def test_get_page_by_path_falls_back_to_list_when_search_returns_wrong_page_id(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_search(path):
+        return PageSummary(id=25, path=path, title="Why Universal USB-C Onboarding matters", description="")
+
+    def fake_list(path):
+        return PageSummary(id=41, path=path, title="Why Universal USB-C Onboarding matters", description="")
+
+    def fake_get(page_id):
+        if page_id == 25:
+            return PageDetail(id=25, path="ideas/primitive-electromechanical-control-bridge", title="Primitive Electromechanical Control Bridge", content="body", description="", tags=[])
+        if page_id == 41:
+            return PageDetail(id=41, path="ideas/universal-usbc-onboarding/why-this-matters", title="Why Universal USB-C Onboarding matters", content="right body", description="", tags=[])
+        raise AssertionError(page_id)
+
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", fake_list)
+    monkeypatch.setattr(client, "_get_page_by_id", fake_get)
+
+    page = client.get_page_by_path("ideas/universal-usbc-onboarding/why-this-matters")
+    assert page is not None
+    assert page.id == 41
+    assert page.path == "ideas/universal-usbc-onboarding/why-this-matters"
+
+
 def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     seen = {}
@@ -59,6 +112,7 @@ def test_get_page_by_path_normalizes_path_before_search(monkeypatch):
         return None
 
     monkeypatch.setattr(client, "_find_page_summary_by_path_via_search", fake_search)
+    monkeypatch.setattr(client, "_find_page_summary_by_path_via_list", lambda path: None)
     assert client.get_page_by_path(" /ideas/homeos/ ") is None
     assert seen["path"] == "ideas/homeos"
 

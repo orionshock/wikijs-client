@@ -12,7 +12,7 @@ def test_top_level_exports_are_available():
     assert SiteVersion is not None
     assert PageTag is not None
     assert MutationResult is not None
-    assert __version__ == "0.1.1"
+    assert __version__ == "0.1.2"
 
 
 def test_top_level_all_includes_supported_public_api():
