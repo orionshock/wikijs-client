@@ -18,6 +18,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - '3.12'
+          - '3.13'
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -25,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install build tools
         run: |
@@ -36,12 +42,15 @@ jobs:
         run: pytest -q
 
       - name: Build package
+        if: matrix.python-version == '3.12'
         run: python -m build
 
       - name: Check package metadata
+        if: matrix.python-version == '3.12'
         run: python -m twine check dist/*
 
       - name: Upload artifacts
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: dist

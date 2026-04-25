@@ -11,9 +11,24 @@ Supported top-level imports are intentionally small and stable:
 - PageTag
 - SiteVersion
 - MutationResult
+- __version__
 """
-
-__all__ = ["WikiJsClient", "WikiJsError", "WikiJsSchemaError", "WikiJsConflictError", "WikiJsValidationError", "MutationResult", "PageDetail", "PageSummary", "PageTag", "SiteVersion"]
 
 from .client import WikiJsClient, WikiJsError, WikiJsSchemaError, WikiJsConflictError, WikiJsValidationError
 from .models import MutationResult, PageDetail, PageSummary, PageTag, SiteVersion
+
+__version__ = "0.1.1"
+
+__all__ = [
+    "WikiJsClient",
+    "WikiJsError",
+    "WikiJsSchemaError",
+    "WikiJsConflictError",
+    "WikiJsValidationError",
+    "MutationResult",
+    "PageDetail",
+    "PageSummary",
+    "PageTag",
+    "SiteVersion",
+    "__version__",
+]

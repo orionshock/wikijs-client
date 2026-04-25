@@ -157,6 +157,8 @@ Environment variables:
 
 ### Install with pip
 
+Requires Python 3.12 or 3.13.
+
 ```bash
 pip install wikijs-client
 ```
@@ -164,7 +166,7 @@ pip install wikijs-client
 ### Development install
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 ```
@@ -173,14 +175,20 @@ pip install -e '.[dev]'
 
 The supported Python API docs live in `docs/python-api.md` and can be moved into the GitHub wiki if you want to keep the README CLI-focused.
 
+Version metadata is also available at runtime:
+
+```python
+import wikijs_client
+print(wikijs_client.__version__)
+```
+
 ## Development
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 pytest -q
 python -m build
-python -m twine check dist/*.tar.gz
-python -m twine check --ignore-unrecognized dist/*.whl
+python -m twine check dist/*
 ```
