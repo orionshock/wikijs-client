@@ -39,7 +39,7 @@ Issues = "https://github.com/orionshock/wikijs-client/issues"
 dev = [
   "build>=1.2,<2",
   "pytest>=8,<9",
-  "twine>=5,<6",
+  "twine>=6.2,<7",
 ]
 
 [project.scripts]
