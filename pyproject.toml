@@ -7,7 +7,7 @@ name = "wikijs-client"
 version = "0.1.2"
 description = "A small Python CLI and library for practical Wiki.js GraphQL page operations"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.11,<3.14"
 dependencies = [
   "requests>=2.31,<3",
 ]
@@ -24,6 +24,7 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Internet :: WWW/HTTP",

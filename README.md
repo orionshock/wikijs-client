@@ -242,7 +242,7 @@ wikijs-client get docs/missing
 
 ### Install with pip
 
-Requires Python 3.12 or 3.13.
+Requires Python 3.11, 3.12, or 3.13.
 
 ```bash
 pip install wikijs-client
@@ -251,7 +251,7 @@ pip install wikijs-client
 ### Development install
 
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 ```
@@ -270,7 +270,7 @@ print(wikijs_client.__version__)
 ## Development
 
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 pytest -q
