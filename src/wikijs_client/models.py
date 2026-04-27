@@ -117,6 +117,8 @@ class MutationResult:
     message: str = ""
     error_code: int | None = None
     page: dict[str, Any] | None = None
+    target: dict[str, Any] | None = None
+    resolved_page: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     previous_page: dict[str, Any] | None = None
     changed: dict[str, Any] = field(default_factory=dict)
@@ -132,6 +134,10 @@ class MutationResult:
         }
         if self.page is not None:
             payload["page"] = self.page
+        if self.target is not None:
+            payload["target"] = self.target
+        if self.resolved_page is not None:
+            payload["resolvedPage"] = self.resolved_page
         if self.previous_page is not None:
             payload["previousPage"] = self.previous_page
         if self.changed:

@@ -61,6 +61,7 @@ class DummyClient:
             succeeded=True,
             message="Page created successfully.",
             page={"path": kwargs["path"], "title": kwargs["title"]},
+            target={"path": kwargs["path"], "title": kwargs["title"]},
             changed={"created": True, "updated": False, "deleted": False},
             metadata={
                 "description_preserved": kwargs.get("preserve_description"),
@@ -70,7 +71,15 @@ class DummyClient:
 
     def delete_page_by_path(self, path):
         self.deleted.append(path)
-        return MutationResult(action="deleted", succeeded=True, message="deleted", changed={"created": False, "updated": False, "deleted": True})
+        return MutationResult(
+            action="deleted",
+            succeeded=True,
+            message="deleted",
+            page={"id": 9, "path": path, "title": "Deleted"},
+            target={"path": path},
+            resolved_page={"id": 9, "path": path, "title": "Deleted"},
+            changed={"created": False, "updated": False, "deleted": True},
+        )
 
     def move_page(self, *, source_path, destination_path, title=None):
         self.moved.append((source_path, destination_path, title))
@@ -79,6 +88,8 @@ class DummyClient:
             succeeded=True,
             message="Page has been updated.",
             page={"path": destination_path, "title": title or "A"},
+            target={"source_path": source_path, "destination_path": destination_path, "title": title or "A"},
+            resolved_page={"id": 1, "path": source_path, "title": "A"},
             changed={"created": False, "updated": True, "deleted": False, "path": True, "title": bool(title)},
         )
 
@@ -188,6 +199,8 @@ def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
     assert cli.cmd_upsert(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "created"
+    assert out["page"]["path"] == "ideas/test"
+    assert out["target"]["path"] == "ideas/test"
 
 
 def test_cmd_upsert_dry_run_create_json(monkeypatch, tmp_path, capsys):
@@ -251,6 +264,9 @@ def test_cmd_delete(monkeypatch, capsys):
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["responseResult"]["succeeded"] is True
+    assert out["page"]["id"] == 9
+    assert out["target"]["path"] == "ideas/test"
+    assert out["resolvedPage"]["title"] == "Deleted"
     assert out["changed"]["deleted"] is True
     assert client.deleted == ["ideas/test"]
 
@@ -295,6 +311,8 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
     assert cli.cmd_upsert(args) == 0
     out = capsys.readouterr().out
     assert "created: ideas/test" in out
+    assert "path ideas/test" in out
+    assert "title 'Test'" in out
     assert "description preserved" in out
     assert "tags preserved" in out
 
@@ -334,6 +352,8 @@ def test_cmd_move(monkeypatch, capsys):
     assert cli.cmd_move(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "moved"
+    assert out["target"]["source_path"] == "ideas/a"
+    assert out["resolvedPage"]["path"] == "ideas/a"
     assert out["changed"]["path"] is True
     assert out["changed"]["title"] is False
     assert client.moved == [("ideas/a", "ideas/b", None)]
@@ -391,6 +411,28 @@ def test_cmd_move_dry_run_human_output(monkeypatch, capsys):
     assert "id 1" in out
     assert "title 'A'" in out
     assert "title 'B'" in out
+
+
+def test_cmd_delete_human_output_includes_identity(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, json=False)
+    assert cli.cmd_delete(args) == 0
+    out = capsys.readouterr().out
+    assert "deleted: ideas/test" in out
+    assert "id 9" in out
+    assert "title 'Deleted'" in out
+
+
+def test_cmd_move_human_output_includes_identity(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
+    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title=None, dry_run=False, json=False)
+    assert cli.cmd_move(args) == 0
+    out = capsys.readouterr().out
+    assert "moved: ideas/a -> ideas/b" in out
+    assert "path ideas/b" in out
+    assert "title 'A'" in out
 
 
 def test_cmd_move_dry_run_human_output_missing(monkeypatch, capsys):

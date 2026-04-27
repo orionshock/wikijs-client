@@ -11,6 +11,23 @@ import requests
 from .models import MutationResult, PageDetail, PageSummary, SiteVersion
 
 
+def _page_identity_from_detail(page: PageDetail) -> dict[str, Any]:
+    return {
+        "id": page.id,
+        "path": page.path,
+        "title": page.title,
+    }
+
+
+def _page_identity_from_payload(page: dict[str, Any] | None, *, path: str, title: str, page_id: int | None = None) -> dict[str, Any]:
+    payload = dict(page or {})
+    if page_id is not None:
+        payload.setdefault("id", page_id)
+    payload.setdefault("path", path)
+    payload.setdefault("title", title)
+    return payload
+
+
 class WikiJsError(RuntimeError):
     """Raised when the Wiki.js API returns an unusable or failed response."""
 
@@ -439,7 +456,11 @@ class WikiJsClient:
             succeeded=bool(response.get("succeeded")),
             message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
-            page=result.get("page"),
+            page=_page_identity_from_payload(result.get("page"), path=path, title=title),
+            target={
+                "path": path,
+                "title": title,
+            },
             changed={
                 "created": bool(response.get("succeeded")),
                 "updated": False,
@@ -494,6 +515,7 @@ class WikiJsClient:
             message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
             page={"id": page_id, "path": path, "title": title},
+            target={"id": page_id, "path": path, "title": title},
             changed={
                 "created": False,
                 "updated": bool(response.get("succeeded")),
@@ -546,6 +568,11 @@ class WikiJsClient:
                     "description": resolved_description,
                     "tags": updated_tags_payload,
                 },
+                target={
+                    "path": path,
+                    "title": title,
+                },
+                resolved_page=_page_identity_from_detail(existing),
                 previous_page={
                     "id": existing.id,
                     "path": existing.path,
@@ -601,6 +628,12 @@ class WikiJsClient:
             message=result.message,
             error_code=result.error_code,
             page={"id": existing.id, "path": destination_path, "title": title or existing.title},
+            target={
+                "source_path": source_path,
+                "destination_path": destination_path,
+                "title": title or existing.title,
+            },
+            resolved_page=_page_identity_from_detail(existing),
             previous_page={"id": existing.id, "path": existing.path, "title": existing.title},
             changed={
                 "created": False,
@@ -641,6 +674,11 @@ class WikiJsClient:
             succeeded=succeeded,
             message=_normalize_response_message(response.get("message")),
             error_code=response.get("errorCode"),
+            page=_page_identity_from_detail(existing),
+            target={
+                "path": path,
+            },
+            resolved_page=_page_identity_from_detail(existing),
             previous_page={
                 "id": existing.id,
                 "path": existing.path,

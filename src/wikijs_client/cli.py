@@ -72,6 +72,19 @@ def is_quiet(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "quiet", False))
 
 
+def _page_identity_text(page: dict[str, Any] | None) -> str:
+    if not page:
+        return ""
+    parts = []
+    if page.get("id") is not None:
+        parts.append(f"id {page['id']}")
+    if page.get("path"):
+        parts.append(f"path {page['path']}")
+    if page.get("title") is not None:
+        parts.append(f"title {page['title']!r}")
+    return ", ".join(parts)
+
+
 def truncate(value: str, width: int) -> str:
     """Truncate a string for compact human-readable table output."""
     if len(value) <= width:
@@ -320,12 +333,15 @@ def cmd_upsert(args: argparse.Namespace) -> int:
     elif not is_quiet(args):
         result_payload = result.to_dict()
         response = result_payload.get("responseResult", {})
+        page_identity = _page_identity_text(result_payload.get("page"))
         details = []
         metadata = result.metadata or {}
         if metadata.get("description_preserved"):
             details.append("description preserved")
         if metadata.get("tags_preserved"):
             details.append("tags preserved")
+        if page_identity:
+            details.insert(0, page_identity)
         suffix = f" [{', '.join(details)}]" if details else ""
         print(f"{result.action}: {args.path} ({response.get('message', 'ok')}){suffix}")
     return EXIT_SUCCESS
@@ -369,8 +385,11 @@ def cmd_delete(args: argparse.Namespace) -> int:
     if args.json:
         emit(result.to_dict())
     elif not is_quiet(args):
-        response = result.to_dict().get("responseResult", {})
-        print(f"deleted: {args.path} ({response.get('message', 'ok')})")
+        result_payload = result.to_dict()
+        response = result_payload.get("responseResult", {})
+        page_identity = _page_identity_text(result_payload.get("page") or result_payload.get("resolvedPage"))
+        suffix = f" [{page_identity}]" if page_identity else ""
+        print(f"deleted: {args.path} ({response.get('message', 'ok')}){suffix}")
     return EXIT_SUCCESS
 
 
@@ -445,8 +464,11 @@ def cmd_move(args: argparse.Namespace) -> int:
     if args.json:
         emit(result.to_dict())
     elif not is_quiet(args):
-        response = result.to_dict().get("responseResult", {})
-        print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')})")
+        result_payload = result.to_dict()
+        response = result_payload.get("responseResult", {})
+        page_identity = _page_identity_text(result_payload.get("page"))
+        suffix = f" [{page_identity}]" if page_identity else ""
+        print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')}){suffix}")
     return EXIT_SUCCESS
 
 

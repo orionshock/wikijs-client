@@ -400,6 +400,18 @@ def test_create_page_allows_non_strict_description_formatting_chars():
     assert captured["description"] == "desc\u2060ok"
 
 
+def test_create_page_returns_target_and_page_identity(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None, **kwargs):
+        return {"pages": {"create": {"responseResult": {"succeeded": True, "message": "ok", "errorCode": 0}, "page": {"id": 1}}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    result = client.create_page(path="ideas/test", title="Test", content="# Test")
+    assert result.page == {"id": 1, "path": "ideas/test", "title": "Test"}
+    assert result.target == {"path": "ideas/test", "title": "Test"}
+
+
 def test_create_page_raises_conflict_error_on_duplicate_path(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
@@ -443,6 +455,18 @@ def test_update_page_raises_validation_error_on_invalid_payload(monkeypatch):
         client.update_page(page_id=1, path="ideas/test", title="Test", content="# Test")
 
 
+def test_update_page_returns_target_identity(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+
+    def fake_post(query, variables=None, **kwargs):
+        return {"pages": {"update": {"responseResult": {"succeeded": True, "message": "updated", "errorCode": 0}}}}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    result = client.update_page(page_id=7, path="ideas/test", title="Test", content="# Test")
+    assert result.page == {"id": 7, "path": "ideas/test", "title": "Test"}
+    assert result.target == {"id": 7, "path": "ideas/test", "title": "Test"}
+
+
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
@@ -477,6 +501,9 @@ def test_delete_page_returns_previous_page_payload(monkeypatch):
 
     monkeypatch.setattr(client, "_post", fake_post)
     result = client.delete_page_by_path("ideas/gone")
+    assert result.page == {"id": 3, "path": "ideas/gone", "title": "Gone"}
+    assert result.target == {"path": "ideas/gone"}
+    assert result.resolved_page == {"id": 3, "path": "ideas/gone", "title": "Gone"}
     assert result.previous_page == {
         "id": 3,
         "path": "ideas/gone",
@@ -485,6 +512,43 @@ def test_delete_page_returns_previous_page_payload(monkeypatch):
         "tags": [{"tag": "cleanup", "title": "Cleanup"}],
     }
     assert result.changed["deleted"] is True
+
+
+def test_upsert_update_returns_target_and_resolved_page(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "get_page_by_path",
+        lambda path: PageDetail(id=3, path=path, title="Old", content="body", description="desc", tags=[PageTag(tag="cleanup", title="Cleanup")]),
+    )
+    monkeypatch.setattr(
+        client,
+        "update_page",
+        lambda **kwargs: MutationResult(action="updated", succeeded=True, message="updated", error_code=0, page={"id": 3, "path": kwargs["path"], "title": kwargs["title"]}),
+    )
+    result = client.upsert_page(path="ideas/gone", title="New", content="new body")
+    assert result.target == {"path": "ideas/gone", "title": "New"}
+    assert result.resolved_page == {"id": 3, "path": "ideas/gone", "title": "Old"}
+    assert result.page["id"] == 3
+
+
+def test_move_page_returns_target_and_resolved_page(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(
+        client,
+        "get_page_by_path",
+        lambda path: PageDetail(id=5, path=path, title="Old", content="body", description="desc", tags=[])
+        if path == "ideas/old" else None,
+    )
+    monkeypatch.setattr(
+        client,
+        "update_page",
+        lambda **kwargs: MutationResult(action="updated", succeeded=True, message="updated", error_code=0, page={"id": 5, "path": kwargs["path"], "title": kwargs["title"]}),
+    )
+    result = client.move_page(source_path="ideas/old", destination_path="ideas/new", title="New")
+    assert result.target == {"source_path": "ideas/old", "destination_path": "ideas/new", "title": "New"}
+    assert result.resolved_page == {"id": 5, "path": "ideas/old", "title": "Old"}
+    assert result.page == {"id": 5, "path": "ideas/new", "title": "New"}
 
 
 def test_delete_page_raises_conflict_error_when_api_reports_lock(monkeypatch):
