@@ -174,11 +174,15 @@ Flags:
 
 Delete a page by exact path.
 
+For safety, real deletes require `--force`. Use `--dry-run` to preview without mutating.
+
 Arguments and flags:
 - `path`
   - exact page path to delete
 - `--dry-run`
   - preview the delete without applying it
+- `--force`
+  - confirm and perform the delete
 - `--quiet`
   - suppress successful stdout output
 - `--json`
@@ -201,6 +205,7 @@ wikijs-client get docs/getting-started
 wikijs-client upsert docs/scratch 'Scratch Page' --file scratch.md
 wikijs-client move docs/scratch docs/reference --title 'Reference Page'
 wikijs-client delete docs/scratch --dry-run
+wikijs-client delete docs/scratch --force
 ```
 
 ## Configuration

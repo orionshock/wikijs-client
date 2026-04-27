@@ -260,7 +260,7 @@ def test_cmd_upsert_dry_run_diff_json(monkeypatch, tmp_path, capsys):
 def test_cmd_delete(monkeypatch, capsys):
     client = DummyClient()
     monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
-    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, json=True)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, force=True, json=True)
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["responseResult"]["succeeded"] is True
@@ -416,7 +416,7 @@ def test_cmd_move_dry_run_human_output(monkeypatch, capsys):
 def test_cmd_delete_human_output_includes_identity(monkeypatch, capsys):
     client = DummyClient()
     monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
-    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, json=False)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=False, force=True, json=False)
     assert cli.cmd_delete(args) == 0
     out = capsys.readouterr().out
     assert "deleted: ideas/test" in out
@@ -463,9 +463,11 @@ def test_build_parser_includes_new_commands():
     assert "--path" in list_help
     assert "--json" not in list_help
     upsert_help = parser._subparsers._group_actions[0].choices["upsert"].format_help()
+    delete_help = parser._subparsers._group_actions[0].choices["delete"].format_help()
     assert "--dry-run" in upsert_help
     assert "--diff" in upsert_help
     assert "include a unified diff" in upsert_help
+    assert "--force" in delete_help
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):
@@ -503,7 +505,7 @@ def test_main_reports_not_found_with_typed_exit_code(monkeypatch, capsys):
         return MissingClient()
 
     monkeypatch.setattr(cli, "build_client", fake_build_client)
-    assert cli.main(["delete", "ideas/missing"]) == cli.EXIT_NOT_FOUND
+    assert cli.main(["delete", "ideas/missing", "--force"]) == cli.EXIT_NOT_FOUND
     err = capsys.readouterr().err
     assert "No page found at path: ideas/missing" in err
 
@@ -566,11 +568,30 @@ def test_quiet_get_suppresses_success_stdout(monkeypatch, capsys):
 def test_quiet_delete_suppresses_success_stdout(monkeypatch, capsys):
     client = DummyClient()
     monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
-    assert cli.main(["delete", "ideas/test", "--quiet"]) == cli.EXIT_SUCCESS
+    assert cli.main(["delete", "ideas/test", "--force", "--quiet"]) == cli.EXIT_SUCCESS
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
     assert client.deleted == ["ideas/test"]
+
+
+def test_delete_requires_force(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
+    assert cli.main(["delete", "ideas/test"]) == cli.EXIT_VALIDATION
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "delete requires --force; use --dry-run to preview" in captured.err
+    assert client.deleted == []
+
+
+def test_delete_dry_run_does_not_require_force(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
+    assert cli.main(["delete", "ideas/test", "--dry-run"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert "dry-run: would not delete ideas/test (page not found)" in captured.out
+    assert client.deleted == []
 
 
 def test_quiet_preserves_stderr_errors(monkeypatch, capsys):

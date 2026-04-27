@@ -381,6 +381,8 @@ def cmd_delete(args: argparse.Namespace) -> int:
             else:
                 print(f"dry-run: would not delete {args.path} (page not found)")
         return EXIT_SUCCESS
+    if not getattr(args, "force", False):
+        raise WikiJsValidationError("delete requires --force; use --dry-run to preview")
     result = client.delete_page_by_path(args.path)
     if args.json:
         emit(result.to_dict())
@@ -557,6 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_delete = sub.add_parser("delete", help="delete a page by exact path")
     p_delete.add_argument("path")
     p_delete.add_argument("--dry-run", action="store_true")
+    p_delete.add_argument("--force", action="store_true", help="confirm and perform the delete")
     p_delete.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
