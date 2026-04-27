@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import unicodedata
 from dataclasses import dataclass
-from typing import Any
+from time import perf_counter
+from typing import Any, Callable
 
 import requests
 
@@ -118,6 +119,11 @@ class WikiJsClient:
     token: str
     timeout: int = 30
     locale: str = "en"
+    debug: Callable[[str], None] | None = None
+
+    def _debug(self, message: str) -> None:
+        if self.debug is not None:
+            self.debug(message)
 
     def _raise_for_mutation_failure(self, *, action: str, response: dict[str, Any] | None) -> None:
         response = response or {}
@@ -157,22 +163,33 @@ class WikiJsClient:
             raise WikiJsValidationError(detail)
         raise WikiJsError(detail)
 
-    def _post(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _post(self, query: str, variables: dict[str, Any] | None = None, *, operation_name: str = "graphql") -> dict[str, Any]:
+        variables_payload = variables or {}
+        self._debug(
+            f"graphql request: {operation_name}"
+            f" variables={sorted(variables_payload.keys())}"
+        )
+        started = perf_counter()
         try:
             response = requests.post(
                 self.url,
-                json={"query": query, "variables": variables or {}},
+                json={"query": query, "variables": variables_payload},
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=self.timeout,
             )
             response.raise_for_status()
         except requests.RequestException as exc:
+            self._debug(f"graphql request failed: {operation_name} error={exc}")
             raise WikiJsError(f"Request to Wiki.js failed: {exc}") from exc
 
         try:
             payload = response.json()
         except ValueError as exc:
+            self._debug(f"graphql response was not json: {operation_name}")
             raise WikiJsError("Wiki.js returned a non-JSON response") from exc
+
+        elapsed_ms = round((perf_counter() - started) * 1000, 1)
+        self._debug(f"graphql response: {operation_name} status={response.status_code} elapsedMs={elapsed_ms}")
 
         if payload.get("errors"):
             messages = []
@@ -181,10 +198,12 @@ class WikiJsClient:
                     messages.append(err.get("message", json.dumps(err, sort_keys=True)))
                 else:
                     messages.append(str(err))
+            self._debug(f"graphql errors: {operation_name} count={len(messages)}")
             raise WikiJsError("GraphQL error(s): " + "; ".join(messages))
 
         data = payload.get("data")
         if data is None:
+            self._debug(f"graphql response missing data: {operation_name}")
             raise WikiJsError("Wiki.js response did not include a data payload")
         return data
 
@@ -203,7 +222,7 @@ class WikiJsClient:
         }
         """
         try:
-            data = self._post(gql)
+            data = self._post(gql, operation_name="system.info")
             payload = data["system"]["info"]
         except KeyError as exc:
             raise WikiJsSchemaError("Wiki.js response did not include system.info; this deployment may not expose version info") from exc
@@ -232,7 +251,7 @@ class WikiJsClient:
             }
             """
             try:
-                data = self._post(gql)
+                data = self._post(gql, operation_name="pages.list")
                 items = data["pages"]["list"]
             except KeyError as exc:
                 raise WikiJsSchemaError("Wiki.js response did not include pages.list; this deployment may not support list-based browsing") from exc
@@ -242,10 +261,13 @@ class WikiJsClient:
     def _find_single_exact_match(self, results: list[PageSummary], *, path: str, source: str) -> PageSummary | None:
         exact_matches = [page for page in results if page.path == path]
         if not exact_matches:
+            self._debug(f"exact path lookup via {source}: no exact match for {path}")
             return None
         if len(exact_matches) > 1:
             ids = ", ".join(str(page.id) for page in exact_matches)
+            self._debug(f"exact path lookup via {source}: ambiguous match for {path} ids={ids}")
             raise WikiJsAmbiguousMatchError(f"Multiple pages matched path exactly via {source}: {path} (ids: {ids})")
+        self._debug(f"exact path lookup via {source}: matched {path} id={exact_matches[0].id}")
         return exact_matches[0]
 
     def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
@@ -293,7 +315,7 @@ class WikiJsClient:
         }
         """
         try:
-            data = self._post(gql, {"path": path_value, "query": query_text, "locale": self.locale})
+            data = self._post(gql, {"path": path_value, "query": query_text, "locale": self.locale}, operation_name="pages.search")
             items = data["pages"]["search"]["results"]
         except KeyError as exc:
             raise WikiJsSchemaError("Wiki.js response did not include pages.search.results; this deployment may not support the expected search schema") from exc
@@ -319,7 +341,7 @@ class WikiJsClient:
         }
         """
         try:
-            data = self._post(query, {"id": page_id})
+            data = self._post(query, {"id": page_id}, operation_name="pages.single")
             payload = data["pages"]["single"]
         except KeyError as exc:
             raise WikiJsSchemaError("Wiki.js response did not include pages.single; this deployment may not support the expected page detail schema") from exc
@@ -333,21 +355,26 @@ class WikiJsClient:
         yields stale ids or mismatched page payloads.
         """
         path = _normalize_path(path)
+        self._debug(f"exact path lookup: start path={path}")
         match = self._find_page_summary_by_path_via_search(path)
         if match is None:
+            self._debug(f"exact path lookup: falling back to pages.list for {path}")
             match = self._find_page_summary_by_path_via_list(path)
             if match is None:
+                self._debug(f"exact path lookup: not found {path}")
                 return None
 
         try:
             page = self._get_page_by_id(match.id)
         except WikiJsError:
+            self._debug(f"exact path lookup: pages.single failed for id={match.id}; retrying via pages.list")
             fallback = self._find_page_summary_by_path_via_list(path)
             if fallback is None or fallback.id == match.id:
                 raise
             return self._get_page_by_id(fallback.id)
 
         if page.path != path:
+            self._debug(f"exact path lookup: pages.single returned {page.path}; verifying via pages.list")
             fallback = self._find_page_summary_by_path_via_list(path)
             if fallback is None:
                 return None
@@ -403,7 +430,7 @@ class WikiJsClient:
             "path": path,
             "title": title,
             "tags": tags,
-        })
+        }, operation_name="pages.create")
         result = data["pages"]["create"]
         response = result["responseResult"]
         self._raise_for_mutation_failure(action="create", response=response)
@@ -457,7 +484,7 @@ class WikiJsClient:
             "path": path,
             "title": title,
             "tags": tags,
-        })
+        }, operation_name="pages.update")
         result = data["pages"]["update"]
         response = result["responseResult"]
         self._raise_for_mutation_failure(action="update", response=response)
@@ -604,7 +631,7 @@ class WikiJsClient:
           }
         }
         """
-        data = self._post(mutation, {"id": existing.id})
+        data = self._post(mutation, {"id": existing.id}, operation_name="pages.delete")
         result = data["pages"]["delete"]
         response = result["responseResult"]
         self._raise_for_mutation_failure(action="delete", response=response)

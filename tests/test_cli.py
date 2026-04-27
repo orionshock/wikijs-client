@@ -3,8 +3,21 @@ from __future__ import annotations
 import json
 
 from wikijs_client import cli
+from wikijs_client import client as client_module
 from wikijs_client.client import WikiJsAmbiguousMatchError, WikiJsError, WikiJsNotFoundError, WikiJsValidationError
 from wikijs_client.models import MutationResult, PageDetail, PageSummary, SiteVersion
+
+
+class FakeResponse:
+    def __init__(self, payload, status_code=200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
 
 
 class DummyClient:
@@ -71,8 +84,8 @@ class DummyClient:
 
 
 def test_run_versioncheck_json(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
-    assert cli.run_versioncheck(as_json=True) == 0
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.run_versioncheck(as_json=True, debug=False) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["currentVersion"] == "2.5.312"
     assert out["targetVersion"] == "2.5.312"
@@ -91,14 +104,14 @@ def test_run_versioncheck_warns_on_mismatch(monkeypatch, capsys):
                 matches_target=False,
             )
 
-    monkeypatch.setattr(cli, "build_client", lambda: MismatchClient())
-    assert cli.run_versioncheck(as_json=False) == 0
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: MismatchClient())
+    assert cli.run_versioncheck(as_json=False, debug=False) == 0
     out = capsys.readouterr().out
     assert "warning: expected 2.5.312, got 2.5.999" in out
 
 
 def test_cmd_list_no_args_shows_all(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(query=None, path=None, regex=None, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
@@ -108,7 +121,7 @@ def test_cmd_list_no_args_shows_all(monkeypatch, capsys):
 
 
 def test_cmd_list_uses_server_query(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(query="alpha", path=None, regex=None, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
@@ -117,7 +130,7 @@ def test_cmd_list_uses_server_query(monkeypatch, capsys):
 
 
 def test_cmd_list_uses_server_path(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(query=None, path="ideas", regex=None, json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
@@ -126,7 +139,7 @@ def test_cmd_list_uses_server_path(monkeypatch, capsys):
 
 
 def test_cmd_list_filters_regex(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(query=None, path=None, regex=r"ideas/.*", json=False)
     assert cli.cmd_list(args) == 0
     out = capsys.readouterr().out
@@ -135,7 +148,7 @@ def test_cmd_list_filters_regex(monkeypatch, capsys):
 
 
 def test_cmd_search_json(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(text="alpha", json=True)
     assert cli.cmd_search(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -143,7 +156,7 @@ def test_cmd_search_json(monkeypatch, capsys):
 
 
 def test_cmd_exists_json_found(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(path="ideas/a", json=True)
     assert cli.cmd_exists(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -152,7 +165,7 @@ def test_cmd_exists_json_found(monkeypatch, capsys):
 
 
 def test_cmd_exists_json_missing(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(path="ideas/missing", json=True)
     assert cli.cmd_exists(args) == cli.EXIT_NOT_FOUND
     out = json.loads(capsys.readouterr().out)
@@ -160,7 +173,7 @@ def test_cmd_exists_json_missing(monkeypatch, capsys):
 
 
 def test_cmd_get_json(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(path="ideas/a", json=True)
     assert cli.cmd_get(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -168,7 +181,7 @@ def test_cmd_get_json(monkeypatch, capsys):
 
 
 def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=False, json=True)
@@ -178,7 +191,7 @@ def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
 
 
 def test_cmd_upsert_dry_run_create_json(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=True)
@@ -198,7 +211,7 @@ def test_cmd_upsert_dry_run_create_json(monkeypatch, tmp_path, capsys):
 
 
 def test_cmd_upsert_dry_run_update_json(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=True)
@@ -219,7 +232,7 @@ def test_cmd_upsert_dry_run_update_json(monkeypatch, tmp_path, capsys):
 
 
 def test_cmd_upsert_dry_run_diff_json(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=True, json=True)
@@ -233,7 +246,7 @@ def test_cmd_upsert_dry_run_diff_json(monkeypatch, tmp_path, capsys):
 
 def test_cmd_delete(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(path="ideas/test", dry_run=False, json=True)
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -244,7 +257,7 @@ def test_cmd_delete(monkeypatch, capsys):
 
 def test_cmd_delete_dry_run(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(path="ideas/test", dry_run=True, json=True)
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -259,7 +272,7 @@ def test_cmd_delete_dry_run(monkeypatch, capsys):
 
 def test_cmd_delete_dry_run_found_json(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(path="ideas/a", dry_run=True, json=True)
     assert cli.cmd_delete(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -275,7 +288,7 @@ def test_cmd_delete_dry_run_found_json(monkeypatch, capsys):
 
 
 def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=False, json=False)
@@ -287,7 +300,7 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
 
 
 def test_cmd_upsert_dry_run_human_output(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=False)
@@ -302,7 +315,7 @@ def test_cmd_upsert_dry_run_human_output(monkeypatch, tmp_path, capsys):
 
 
 def test_cmd_upsert_dry_run_human_diff_output(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=True, json=False)
@@ -316,7 +329,7 @@ def test_cmd_upsert_dry_run_human_diff_output(monkeypatch, tmp_path, capsys):
 
 def test_cmd_move(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title=None, dry_run=False, json=True)
     assert cli.cmd_move(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -328,7 +341,7 @@ def test_cmd_move(monkeypatch, capsys):
 
 def test_cmd_move_dry_run(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title="B", dry_run=True, json=True)
     assert cli.cmd_move(args) == 0
     out = json.loads(capsys.readouterr().out)
@@ -350,7 +363,7 @@ def test_cmd_move_dry_run(monkeypatch, capsys):
 
 def test_cmd_delete_dry_run_human_output_found(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(path="ideas/a", dry_run=True, json=False)
     assert cli.cmd_delete(args) == 0
     out = capsys.readouterr().out
@@ -361,7 +374,7 @@ def test_cmd_delete_dry_run_human_output_found(monkeypatch, capsys):
 
 def test_cmd_delete_dry_run_human_output_missing(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(path="ideas/test", dry_run=True, json=False)
     assert cli.cmd_delete(args) == 0
     out = capsys.readouterr().out
@@ -370,7 +383,7 @@ def test_cmd_delete_dry_run_human_output_missing(monkeypatch, capsys):
 
 def test_cmd_move_dry_run_human_output(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title="B", dry_run=True, json=False)
     assert cli.cmd_move(args) == 0
     out = capsys.readouterr().out
@@ -382,7 +395,7 @@ def test_cmd_move_dry_run_human_output(monkeypatch, capsys):
 
 def test_cmd_move_dry_run_human_output_missing(monkeypatch, capsys):
     client = DummyClient()
-    monkeypatch.setattr(cli, "build_client", lambda: client)
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
     args = cli.argparse.Namespace(source_path="ideas/missing", destination_path="ideas/b", title=None, dry_run=True, json=False)
     assert cli.cmd_move(args) == 0
     out = capsys.readouterr().out
@@ -399,6 +412,7 @@ def test_build_parser_includes_new_commands():
     assert "delete" in help_text
     assert "move" in help_text
     assert "--versioncheck" in help_text
+    assert "--debug" in help_text
     assert "wikijs-client 0.1.2" in help_text
     assert "Use --json to emit structured output." in help_text
     assert "Use '<command> --help' for command-specific arguments and examples." in help_text
@@ -412,7 +426,7 @@ def test_build_parser_includes_new_commands():
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):
-    def fake_build_client():
+    def fake_build_client(**kwargs):
         raise WikiJsError("bad graphql")
 
     monkeypatch.setattr(cli, "build_client", fake_build_client)
@@ -430,7 +444,7 @@ def test_main_reports_missing_env(capsys, monkeypatch):
 
 
 def test_cmd_get_missing_returns_not_found(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     args = cli.argparse.Namespace(path="ideas/missing", json=False)
     assert cli.cmd_get(args) == cli.EXIT_NOT_FOUND
     err = capsys.readouterr().err
@@ -438,7 +452,7 @@ def test_cmd_get_missing_returns_not_found(monkeypatch, capsys):
 
 
 def test_main_reports_not_found_with_typed_exit_code(monkeypatch, capsys):
-    def fake_build_client():
+    def fake_build_client(**kwargs):
         class MissingClient(DummyClient):
             def delete_page_by_path(self, path):
                 raise WikiJsNotFoundError(f"No page found at path: {path}")
@@ -452,7 +466,7 @@ def test_main_reports_not_found_with_typed_exit_code(monkeypatch, capsys):
 
 
 def test_main_reports_ambiguous_with_typed_exit_code(monkeypatch, capsys):
-    def fake_build_client():
+    def fake_build_client(**kwargs):
         class AmbiguousClient(DummyClient):
             def get_page_by_path(self, path):
                 raise WikiJsAmbiguousMatchError(f"Multiple pages matched path exactly via pages.search: {path}")
@@ -466,7 +480,7 @@ def test_main_reports_ambiguous_with_typed_exit_code(monkeypatch, capsys):
 
 
 def test_main_reports_validation_with_typed_exit_code(monkeypatch, capsys):
-    def fake_build_client():
+    def fake_build_client(**kwargs):
         raise WikiJsValidationError("bad config")
 
     monkeypatch.setattr(cli, "build_client", fake_build_client)
@@ -476,10 +490,56 @@ def test_main_reports_validation_with_typed_exit_code(monkeypatch, capsys):
 
 
 def test_main_supports_versioncheck_flag(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     assert cli.main(["--versioncheck", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["targetVersion"] == "2.5.312"
+
+
+def test_debug_output_goes_to_stderr_and_json_stdout_stays_parseable(monkeypatch, capsys):
+    monkeypatch.setenv("WIKIJS_URL", "https://example.invalid/graphql?token=leakme")
+    monkeypatch.setenv("WIKIJS_TOKEN", "super-secret-token")
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        query = (json or {}).get("query", "")
+        variables = (json or {}).get("variables", {})
+        if "search(path:" in query:
+            return FakeResponse({"data": {"pages": {"search": {"results": [{"id": 7, "path": variables["path"], "title": "Example"}]}}}})
+        if "single(id:" in query:
+            return FakeResponse({"data": {"pages": {"single": {"id": 7, "path": "ideas/a", "title": "Example", "content": "body", "description": "", "tags": []}}}})
+        raise AssertionError(query)
+
+    monkeypatch.setattr(client_module.requests, "post", fake_post)
+    assert cli.main(["exists", "ideas/a", "--json", "--debug"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    out = json.loads(captured.out)
+    assert out == {"path": "ideas/a", "exists": True}
+    assert "debug: command=exists" in captured.err
+    assert "debug: client config: url=https://example.invalid/graphql locale=en" in captured.err
+    assert "debug: graphql request: pages.search" in captured.err
+    assert "debug: graphql request: pages.single" in captured.err
+    assert "super-secret-token" not in captured.err
+    assert "leakme" not in captured.err
+
+
+def test_debug_flag_works_before_subcommand_too(monkeypatch, capsys):
+    monkeypatch.setenv("WIKIJS_URL", "https://example.invalid/graphql")
+    monkeypatch.setenv("WIKIJS_TOKEN", "secret")
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        query = (json or {}).get("query", "")
+        if "search(path:" in query:
+            return FakeResponse({"data": {"pages": {"search": {"results": []}}}})
+        if "list(orderBy: PATH)" in query:
+            return FakeResponse({"data": {"pages": {"list": []}}})
+        raise AssertionError(query)
+
+    monkeypatch.setattr(client_module.requests, "post", fake_post)
+    assert cli.main(["--debug", "exists", "ideas/missing", "--json"]) == cli.EXIT_NOT_FOUND
+    captured = capsys.readouterr()
+    out = json.loads(captured.out)
+    assert out == {"path": "ideas/missing", "exists": False}
+    assert "debug: command=exists" in captured.err
 
 
 def test_build_client_uses_optional_locale(monkeypatch):
@@ -493,7 +553,7 @@ def test_build_client_uses_optional_locale(monkeypatch):
 
 
 def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
     args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="desc", tags=["a"], replace_description=True, replace_tags=True, dry_run=False, json=True)

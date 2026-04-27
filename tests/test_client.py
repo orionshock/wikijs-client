@@ -31,7 +31,7 @@ class DummyResponse:
 def test_get_page_by_path_returns_none_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {"pages": {"search": {"results": []}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
@@ -43,7 +43,7 @@ def test_get_page_by_path_fetches_single_page(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     calls = []
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         calls.append((query, variables))
         if "search(path:" in query:
             return {"pages": {"search": {"results": [{"id": 7, "path": "docs/example-page", "title": "Example Page"}]}}}
@@ -129,7 +129,7 @@ def test_search_pages_uses_search_query(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     captured = {}
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         captured["query"] = query
         captured["variables"] = variables
         return {"pages": {"search": {"results": [{"id": 7, "path": "docs/example-page", "title": "Example Page"}]}}}
@@ -145,7 +145,7 @@ def test_search_pages_uses_search_query(monkeypatch):
 def test_search_lookup_filters_non_exact_matches(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {
             "pages": {
                 "search": {
@@ -167,7 +167,7 @@ def test_search_lookup_filters_non_exact_matches(monkeypatch):
 def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {
             "pages": {
                 "search": {
@@ -187,7 +187,7 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
 def test_get_version_returns_system_info(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {"system": {"info": {"currentVersion": "2.5.312", "latestVersion": "2.5.312", "latestVersionReleaseDate": "2026-02-11T00:00:00.000Z", "upgradeCapable": False}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
@@ -198,7 +198,7 @@ def test_get_version_returns_system_info(monkeypatch):
 
 def test_get_version_raises_schema_error_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"system": {}})
+    monkeypatch.setattr(client, "_post", lambda query, variables=None, **kwargs: {"system": {}})
     with pytest.raises(WikiJsSchemaError, match="did not include system.info"):
         client.get_version()
 
@@ -207,7 +207,7 @@ def test_list_pages_without_filters_uses_pages_list(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     captured = {}
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         captured["query"] = query
         captured["variables"] = variables
         return {"pages": {"list": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS", "description": "desc"}]}}
@@ -387,7 +387,7 @@ def test_create_page_allows_non_strict_description_formatting_chars():
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     captured = {}
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         captured.update(variables or {})
         return {"pages": {"create": {"responseResult": {"succeeded": True, "message": "ok", "errorCode": 0}, "page": {"id": 1, "path": "ideas/test", "title": "Test"}}}}
 
@@ -403,7 +403,7 @@ def test_create_page_allows_non_strict_description_formatting_chars():
 def test_create_page_raises_conflict_error_on_duplicate_path(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {
             "pages": {
                 "create": {
@@ -425,7 +425,7 @@ def test_create_page_raises_conflict_error_on_duplicate_path(monkeypatch):
 def test_update_page_raises_validation_error_on_invalid_payload(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {
             "pages": {
                 "update": {
@@ -472,7 +472,7 @@ def test_delete_page_returns_previous_page_payload(monkeypatch):
         lambda path: PageDetail(id=3, path=path, title="Gone", content="body", description="desc", tags=[PageTag(tag="cleanup", title="Cleanup")]),
     )
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {"pages": {"delete": {"responseResult": {"succeeded": True, "message": "deleted", "errorCode": 0}}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
@@ -495,7 +495,7 @@ def test_delete_page_raises_conflict_error_when_api_reports_lock(monkeypatch):
         lambda path: PageDetail(id=3, path=path, title="Gone", content="body", description="desc", tags=[]),
     )
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         return {"pages": {"delete": {"responseResult": {"succeeded": False, "message": "Delete conflict: page is locked", "errorCode": 423}}}}
 
     monkeypatch.setattr(client, "_post", fake_post)
@@ -547,14 +547,14 @@ def test_post_rejects_missing_data_payload(monkeypatch):
 
 def test_search_pages_raises_schema_error_when_results_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"pages": {"search": {}}})
+    monkeypatch.setattr(client, "_post", lambda query, variables=None, **kwargs: {"pages": {"search": {}}})
     with pytest.raises(WikiJsSchemaError, match="did not include pages.search.results"):
         client.search_pages(query="homeos")
 
 
 def test_list_pages_raises_schema_error_when_list_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
-    monkeypatch.setattr(client, "_post", lambda query, variables=None: {"pages": {}})
+    monkeypatch.setattr(client, "_post", lambda query, variables=None, **kwargs: {"pages": {}})
     with pytest.raises(WikiJsSchemaError, match="did not include pages.list"):
         client.list_pages()
 
@@ -563,7 +563,7 @@ def test_list_pages_with_path_uses_search(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     captured = {}
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         captured["variables"] = variables
         return {"pages": {"search": {"results": [{"id": 7, "path": "ideas/homeos", "title": "HomeOS"}]}}}
 
@@ -577,7 +577,7 @@ def test_search_pages_uses_client_locale(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token", locale="fr")
     captured = {}
 
-    def fake_post(query, variables=None):
+    def fake_post(query, variables=None, **kwargs):
         captured["query"] = query
         captured["variables"] = variables
         return {"pages": {"search": {"results": []}}}

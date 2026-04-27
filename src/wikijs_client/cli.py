@@ -8,6 +8,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from . import __version__
 from .client import (
@@ -30,14 +31,36 @@ EXIT_AMBIGUOUS = 3
 EXIT_VALIDATION = 4
 
 
-def build_client() -> WikiJsClient:
+def _debug_emit(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"debug: {message}", file=sys.stderr)
+
+
+def _sanitize_url(url: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
+def _summarize_args(args: argparse.Namespace) -> str:
+    parts = []
+    for key, value in sorted(vars(args).items()):
+        if key in {"func", "debug"}:
+            continue
+        if value in (None, False):
+            continue
+        parts.append(f"{key}={value!r}")
+    return ", ".join(parts) if parts else "(no options)"
+
+
+def build_client(*, debug: bool = False) -> WikiJsClient:
     """Build a client from environment variables."""
     url = os.environ.get("WIKIJS_URL")
     token = os.environ.get("WIKIJS_TOKEN")
     locale = os.environ.get("WIKIJS_LOCALE", "en")
     if not url or not token:
         raise WikiJsValidationError("WIKIJS_URL and WIKIJS_TOKEN must be set")
-    return WikiJsClient(url=url, token=token, locale=locale)
+    _debug_emit(debug, f"client config: url={_sanitize_url(url)} locale={locale}")
+    return WikiJsClient(url=url, token=token, locale=locale, debug=(lambda message: _debug_emit(debug, message)))
 
 
 def emit(data: Any) -> None:
@@ -73,8 +96,8 @@ def _render_page_table(pages: list[PageSummary], *, as_json: bool) -> None:
     print(f"\n{len(pages)} page(s)")
 
 
-def run_versioncheck(*, as_json: bool) -> int:
-    client = build_client()
+def run_versioncheck(*, as_json: bool, debug: bool) -> int:
+    client = build_client(debug=debug)
     version = client.get_version(target_version=TARGET_WIKIJS_VERSION)
     payload = version.to_dict()
     if as_json:
@@ -96,7 +119,7 @@ def run_versioncheck(*, as_json: bool) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     pages = client.list_pages(query=args.query or "", path=args.path or "")
     if args.regex:
         pattern = re.compile(args.regex)
@@ -106,14 +129,14 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_search(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     pages = client.search_pages(query=args.text)
     _render_page_table(pages, as_json=args.json)
     return EXIT_SUCCESS
 
 
 def cmd_exists(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     page = client.get_page_by_path(args.path)
     exists = page is not None
     if args.json:
@@ -124,7 +147,7 @@ def cmd_exists(args: argparse.Namespace) -> int:
 
 
 def cmd_get(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     page = client.get_page_by_path(args.path)
     if not page:
         print(f"No page found at path: {args.path}", file=sys.stderr)
@@ -137,7 +160,7 @@ def cmd_get(args: argparse.Namespace) -> int:
 
 
 def cmd_upsert(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     if args.file:
         content = Path(args.file).read_text()
         content_source = "file"
@@ -297,7 +320,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     if args.dry_run:
         existing = client.get_page_by_path(args.path)
         payload = {
@@ -340,7 +363,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_move(args: argparse.Namespace) -> int:
-    client = build_client()
+    client = build_client(debug=getattr(args, "debug", False))
     if args.dry_run:
         existing = client.get_page_by_path(args.source_path)
         destination_existing = client.get_page_by_path(args.destination_path)
@@ -428,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--versioncheck", action="store_true", help=f"check the server version against the project target ({TARGET_WIKIJS_VERSION})")
     parser.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
+    parser.add_argument("--debug", action="store_true", help="emit debug details to stderr without contaminating stdout")
     sub = parser.add_subparsers(dest="command")
 
     p_list = sub.add_parser(
@@ -438,7 +462,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--query", help="text to pass to Wiki.js search query")
     p_list.add_argument("--path", help="path to pass to Wiki.js search for scoped discovery")
     p_list.add_argument("--regex", help="regular expression filter across returned path, title, and description")
-    p_list.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_list.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_list.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_list.set_defaults(func=cmd_list)
 
     p_search = sub.add_parser(
@@ -447,7 +472,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Search pages using pages.search(path='', query=TEXT). This is the preferred global text search command when you want ranked search results rather than full-wiki list filtering.",
     )
     p_search.add_argument("text", help="search text to send to Wiki.js search")
-    p_search.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_search.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_search.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_search.set_defaults(func=cmd_search)
 
     p_exists = sub.add_parser(
@@ -456,7 +482,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check whether a page exists at an exact path. This prefers targeted lookup, but verifies exact matches safely and falls back to full page listing when Wiki.js search results are stale or inconsistent.",
     )
     p_exists.add_argument("path", help="exact page path to check")
-    p_exists.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_exists.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_exists.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_exists.set_defaults(func=cmd_exists)
 
     p_get = sub.add_parser(
@@ -465,7 +492,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Fetch page content by exact path using the same verified exact-path lookup flow as the exists command.",
     )
     p_get.add_argument("path")
-    p_get.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_get.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_get.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.set_defaults(func=cmd_get)
 
     p_upsert = sub.add_parser(
@@ -482,13 +510,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_upsert.add_argument("--replace-tags", action="store_true", help="replace existing tags instead of preserving them when omitted")
     p_upsert.add_argument("--dry-run", action="store_true", help="preview whether upsert would create or update without mutating")
     p_upsert.add_argument("--diff", action="store_true", help="with --dry-run, include a unified diff of content changes")
-    p_upsert.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_upsert.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_upsert.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_upsert.set_defaults(func=cmd_upsert)
 
     p_delete = sub.add_parser("delete", help="delete a page by exact path")
     p_delete.add_argument("path")
     p_delete.add_argument("--dry-run", action="store_true")
-    p_delete.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_delete.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_delete.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.set_defaults(func=cmd_delete)
 
     p_move = sub.add_parser("move", help="move or rename a page by exact path")
@@ -496,7 +526,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_move.add_argument("destination_path")
     p_move.add_argument("--title", help="optional new title; defaults to the existing title")
     p_move.add_argument("--dry-run", action="store_true")
-    p_move.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    p_move.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_move.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_move.set_defaults(func=cmd_move)
     return parser
 
@@ -506,9 +537,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.versioncheck:
-            return run_versioncheck(as_json=args.json)
+            _debug_emit(args.debug, f"command=versioncheck args={_summarize_args(args)}")
+            return run_versioncheck(as_json=args.json, debug=args.debug)
         if not hasattr(args, "func"):
             parser.error("a command is required unless --versioncheck is used")
+        _debug_emit(args.debug, f"command={args.command} args={_summarize_args(args)}")
         return args.func(args)
     except WikiJsNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
