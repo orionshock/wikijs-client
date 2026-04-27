@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -8,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .client import WikiJsClient, WikiJsError
 from .models import PageSummary
 
@@ -125,8 +127,137 @@ def cmd_upsert(args: argparse.Namespace) -> int:
     client = build_client()
     if args.file:
         content = Path(args.file).read_text()
+        content_source = "file"
     else:
         content = sys.stdin.read()
+        content_source = "stdin"
+    if args.dry_run:
+        path = args.path
+        title = args.title
+        existing = client.get_page_by_path(path)
+        description_preserved = bool(existing and args.description is None and not args.replace_description)
+        tags_preserved = bool(existing and args.tags is None and not args.replace_tags)
+        existing_tags = [t.tag for t in existing.tags if t.tag] if existing else []
+        resolved_description = existing.description if description_preserved else (args.description or "")
+        resolved_tags = existing_tags if tags_preserved else (args.tags or [])
+        content_changed = True if not existing else existing.content != content
+        title_changed = False if not existing else existing.title != title
+        description_changed = bool(existing and (resolved_description != existing.description))
+        tags_changed = bool(existing and (resolved_tags != existing_tags))
+        change_summary = {
+            "content": {
+                "changed": content_changed,
+                "oldChars": 0 if not existing else len(existing.content),
+                "newChars": len(content),
+                "oldLines": 0 if not existing else len(existing.content.splitlines()),
+                "newLines": len(content.splitlines()),
+            },
+            "title": {
+                "changed": title_changed,
+            },
+            "description": {
+                "changed": description_changed,
+                "preserved": description_preserved,
+            },
+            "tags": {
+                "changed": tags_changed,
+                "preserved": tags_preserved,
+                "oldCount": len(existing_tags),
+                "newCount": len(resolved_tags),
+            },
+        }
+        payload = {
+            "action": "update" if existing else "create",
+            "dry_run": True,
+            "wouldMutate": True,
+            "target": {
+                "path": path,
+                "title": title,
+            },
+            "changed": {
+                "content": content_changed,
+                "title": title_changed,
+                "description": description_changed,
+                "tags": tags_changed,
+                "created": not bool(existing),
+                "updated": bool(existing),
+                "deleted": False,
+            },
+            "metadata": {
+                "description_preserved": description_preserved,
+                "tags_preserved": tags_preserved,
+                "content_source": content_source,
+                "change_summary": change_summary,
+            },
+        }
+        if existing:
+            payload["resolvedPage"] = {
+                "id": existing.id,
+                "path": existing.path,
+                "title": existing.title,
+            }
+        if args.diff:
+            before_lines = [] if not existing else existing.content.splitlines(keepends=True)
+            after_lines = content.splitlines(keepends=True)
+            payload["diff"] = list(
+                difflib.unified_diff(
+                    before_lines,
+                    after_lines,
+                    fromfile=f"wiki:{path}" if existing else "/dev/null",
+                    tofile=f"input:{path}",
+                    lineterm="",
+                )
+            )
+        if args.json:
+            emit(payload)
+        else:
+            details = []
+            summary = payload["metadata"]["change_summary"]
+            content_summary = summary["content"]
+            if content_summary["changed"]:
+                details.append(
+                    f"content changed: {content_summary['oldChars']} -> {content_summary['newChars']} chars"
+                )
+            else:
+                details.append("content unchanged")
+            if summary["title"]["changed"]:
+                details.append("title changed")
+            else:
+                details.append("title unchanged")
+            if payload["metadata"]["description_preserved"]:
+                details.append("description preserved")
+            elif summary["description"]["changed"]:
+                details.append("description changed")
+            else:
+                details.append("description unchanged")
+            if payload["metadata"]["tags_preserved"]:
+                details.append("tags preserved")
+            elif summary["tags"]["changed"]:
+                details.append(f"tags changed: {summary['tags']['oldCount']} -> {summary['tags']['newCount']}")
+            else:
+                details.append("tags unchanged")
+            suffix = f" [{', '.join(details)}]" if details else ""
+            if existing:
+                print(f"dry-run: would update {path} (id {existing.id}, title {existing.title!r}){suffix}")
+            else:
+                print(f"dry-run: would create {path} with title {title!r}{suffix}")
+            if args.diff:
+                before_lines = [] if not existing else existing.content.splitlines(keepends=True)
+                after_lines = content.splitlines(keepends=True)
+                diff_lines = list(
+                    difflib.unified_diff(
+                        before_lines,
+                        after_lines,
+                        fromfile=f"wiki:{path}" if existing else "/dev/null",
+                        tofile=f"input:{path}",
+                        lineterm="",
+                    )
+                )
+                if diff_lines:
+                    print("\n" + "\n".join(diff_lines))
+                else:
+                    print("\n(no diff)")
+        return 0
     result = client.upsert_page(
         path=args.path,
         title=args.title,
@@ -202,10 +333,16 @@ def cmd_move(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wikijs-client",
-        description="Practical Wiki.js GraphQL CLI with separate commands for exact existence checks, global search, and predictable list-based browsing.",
+        description=(
+            f"wikijs-client {__version__}\n\n"
+            "Practical Wiki.js GraphQL CLI with separate commands for exact existence checks, "
+            "global search, and predictable list-based browsing. Use --json to emit structured output.\n"
+            "Use '<command> --help' for command-specific arguments and examples."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--versioncheck", action="store_true", help=f"check the server version against the project target ({TARGET_WIKIJS_VERSION})")
-    parser.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output for --versioncheck")
+    parser.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
     sub = parser.add_subparsers(dest="command")
 
     p_list = sub.add_parser(
@@ -216,7 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--query", help="text to pass to Wiki.js search query")
     p_list.add_argument("--path", help="path to pass to Wiki.js search for scoped discovery")
     p_list.add_argument("--regex", help="regular expression filter across returned path, title, and description")
-    p_list.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
+    p_list.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_list.set_defaults(func=cmd_list)
 
     p_search = sub.add_parser(
@@ -225,7 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Search pages using pages.search(path='', query=TEXT). This is the preferred global text search command when you want ranked search results rather than full-wiki list filtering.",
     )
     p_search.add_argument("text", help="search text to send to Wiki.js search")
-    p_search.add_argument("--json", action="store_true", help="emit structured JSON instead of a table")
+    p_search.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_search.set_defaults(func=cmd_search)
 
     p_exists = sub.add_parser(
@@ -234,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check whether a page exists at an exact path. This prefers targeted lookup, but verifies exact matches safely and falls back to full page listing when Wiki.js search results are stale or inconsistent.",
     )
     p_exists.add_argument("path", help="exact page path to check")
-    p_exists.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
+    p_exists.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_exists.set_defaults(func=cmd_exists)
 
     p_get = sub.add_parser(
@@ -243,10 +380,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="Fetch page content by exact path using the same verified exact-path lookup flow as the exists command.",
     )
     p_get.add_argument("path")
-    p_get.add_argument("--json", action="store_true")
+    p_get.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_get.set_defaults(func=cmd_get)
 
-    p_upsert = sub.add_parser("upsert")
+    p_upsert = sub.add_parser(
+        "upsert",
+        help="create a page when missing or update it when present",
+        description="Create a page when it does not exist, or update it when it does. Use --dry-run to preview the action without mutating; add --diff to include a unified diff in the dry-run output.",
+    )
     p_upsert.add_argument("path")
     p_upsert.add_argument("title")
     p_upsert.add_argument("--file")
@@ -254,21 +395,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_upsert.add_argument("--tags", nargs="*")
     p_upsert.add_argument("--replace-description", action="store_true", help="replace existing description instead of preserving it when omitted")
     p_upsert.add_argument("--replace-tags", action="store_true", help="replace existing tags instead of preserving them when omitted")
-    p_upsert.add_argument("--json", action="store_true")
+    p_upsert.add_argument("--dry-run", action="store_true", help="preview whether upsert would create or update without mutating")
+    p_upsert.add_argument("--diff", action="store_true", help="with --dry-run, include a unified diff of content changes")
+    p_upsert.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_upsert.set_defaults(func=cmd_upsert)
 
-    p_delete = sub.add_parser("delete")
+    p_delete = sub.add_parser("delete", help="delete a page by exact path")
     p_delete.add_argument("path")
     p_delete.add_argument("--dry-run", action="store_true")
-    p_delete.add_argument("--json", action="store_true")
+    p_delete.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_delete.set_defaults(func=cmd_delete)
 
-    p_move = sub.add_parser("move")
+    p_move = sub.add_parser("move", help="move or rename a page by exact path")
     p_move.add_argument("source_path")
     p_move.add_argument("destination_path")
     p_move.add_argument("--title", help="optional new title; defaults to the existing title")
     p_move.add_argument("--dry-run", action="store_true")
-    p_move.add_argument("--json", action="store_true")
+    p_move.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     p_move.set_defaults(func=cmd_move)
     return parser
 

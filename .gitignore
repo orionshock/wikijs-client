@@ -9,3 +9,4 @@ build/
 *.egg-info/
 .env
 .pytest_cache/
+LOCAL_RELEASE_HARDENING_PLAN.md

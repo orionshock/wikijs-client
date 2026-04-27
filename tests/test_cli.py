@@ -171,10 +171,64 @@ def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
-    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, json=True)
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=False, json=True)
     assert cli.cmd_upsert(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "created"
+
+
+def test_cmd_upsert_dry_run_create_json(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=True)
+    assert cli.cmd_upsert(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "create"
+    assert out["dry_run"] is True
+    assert out["target"]["path"] == "ideas/test"
+    assert out["target"]["title"] == "Test"
+    assert out["changed"]["created"] is True
+    assert out["changed"]["updated"] is False
+    assert out["metadata"]["content_source"] == "file"
+    assert out["metadata"]["change_summary"]["content"]["changed"] is True
+    assert out["metadata"]["change_summary"]["content"]["oldChars"] == 0
+    assert out["metadata"]["change_summary"]["content"]["newChars"] == len("# Body\n")
+    assert "resolvedPage" not in out
+
+
+def test_cmd_upsert_dry_run_update_json(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=True)
+    assert cli.cmd_upsert(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "update"
+    assert out["dry_run"] is True
+    assert out["resolvedPage"]["id"] == 1
+    assert out["resolvedPage"]["path"] == "ideas/a"
+    assert out["metadata"]["description_preserved"] is True
+    assert out["metadata"]["tags_preserved"] is True
+    assert out["changed"]["updated"] is True
+    assert out["changed"]["deleted"] is False
+    assert out["metadata"]["change_summary"]["content"]["changed"] is True
+    assert out["metadata"]["change_summary"]["content"]["oldChars"] == len("hello")
+    assert out["metadata"]["change_summary"]["content"]["newChars"] == len("# Body\n")
+    assert out["metadata"]["change_summary"]["title"]["changed"] is False
+
+
+def test_cmd_upsert_dry_run_diff_json(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=True, json=True)
+    assert cli.cmd_upsert(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["diff"][0] == "--- wiki:ideas/a"
+    assert out["diff"][1] == "+++ input:ideas/a"
+    assert any(line.startswith("-hello") for line in out["diff"])
+    assert any(line.startswith("+# Body") for line in out["diff"])
 
 
 def test_cmd_delete(monkeypatch, capsys):
@@ -203,12 +257,40 @@ def test_cmd_upsert_human_output(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
-    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, json=False)
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=False, json=False)
     assert cli.cmd_upsert(args) == 0
     out = capsys.readouterr().out
     assert "created: ideas/test" in out
     assert "description preserved" in out
     assert "tags preserved" in out
+
+
+def test_cmd_upsert_dry_run_human_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=False, json=False)
+    assert cli.cmd_upsert(args) == 0
+    out = capsys.readouterr().out
+    assert "dry-run: would update ideas/a" in out
+    assert "id 1" in out
+    assert "content changed: 5 -> 7 chars" in out
+    assert "title unchanged" in out
+    assert "description preserved" in out
+    assert "tags preserved" in out
+
+
+def test_cmd_upsert_dry_run_human_diff_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    p = tmp_path / "body.md"
+    p.write_text("# Body\n")
+    args = cli.argparse.Namespace(path="ideas/a", title="A", file=str(p), description=None, tags=None, replace_description=False, replace_tags=False, dry_run=True, diff=True, json=False)
+    assert cli.cmd_upsert(args) == 0
+    out = capsys.readouterr().out
+    assert "--- wiki:ideas/a" in out
+    assert "+++ input:ideas/a" in out
+    assert "-hello" in out
+    assert "+# Body" in out
 
 
 def test_cmd_move(monkeypatch, capsys):
@@ -241,9 +323,20 @@ def test_build_parser_includes_new_commands():
     list_help = parser._subparsers._group_actions[0].choices["list"].format_help()
     assert "search" in help_text
     assert "exists" in help_text
+    assert "upsert" in help_text
+    assert "delete" in help_text
+    assert "move" in help_text
     assert "--versioncheck" in help_text
+    assert "wikijs-client 0.1.2" in help_text
+    assert "Use --json to emit structured output." in help_text
+    assert "Use '<command> --help' for command-specific arguments and examples." in help_text
     assert "--query" in list_help
     assert "--path" in list_help
+    assert "--json" not in list_help
+    upsert_help = parser._subparsers._group_actions[0].choices["upsert"].format_help()
+    assert "--dry-run" in upsert_help
+    assert "--diff" in upsert_help
+    assert "include a unified diff" in upsert_help
 
 
 def test_main_reports_wikijs_error(monkeypatch, capsys):
@@ -285,7 +378,7 @@ def test_cmd_upsert_replace_flags_flow(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     p = tmp_path / "body.md"
     p.write_text("# Body\n")
-    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="desc", tags=["a"], replace_description=True, replace_tags=True, json=True)
+    args = cli.argparse.Namespace(path="ideas/test", title="Test", file=str(p), description="desc", tags=["a"], replace_description=True, replace_tags=True, dry_run=False, json=True)
     assert cli.cmd_upsert(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["metadata"]["description_preserved"] is False
