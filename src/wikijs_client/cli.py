@@ -10,11 +10,24 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .client import WikiJsClient, WikiJsError
+from .client import (
+    WikiJsAmbiguousMatchError,
+    WikiJsClient,
+    WikiJsConflictError,
+    WikiJsError,
+    WikiJsNotFoundError,
+    WikiJsSchemaError,
+    WikiJsValidationError,
+)
 from .models import PageSummary
 
 
 TARGET_WIKIJS_VERSION = "2.5.312"
+EXIT_SUCCESS = 0
+EXIT_GENERAL_FAILURE = 1
+EXIT_NOT_FOUND = 2
+EXIT_AMBIGUOUS = 3
+EXIT_VALIDATION = 4
 
 
 def build_client() -> WikiJsClient:
@@ -23,7 +36,7 @@ def build_client() -> WikiJsClient:
     token = os.environ.get("WIKIJS_TOKEN")
     locale = os.environ.get("WIKIJS_LOCALE", "en")
     if not url or not token:
-        raise WikiJsError("WIKIJS_URL and WIKIJS_TOKEN must be set")
+        raise WikiJsValidationError("WIKIJS_URL and WIKIJS_TOKEN must be set")
     return WikiJsClient(url=url, token=token, locale=locale)
 
 
@@ -79,7 +92,7 @@ def run_versioncheck(*, as_json: bool) -> int:
             print(f"warning: expected {payload['targetVersion']}, got {payload['currentVersion'] or 'unknown'}")
         elif payload["matchesTarget"] is True:
             print("version check: ok")
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -89,14 +102,14 @@ def cmd_list(args: argparse.Namespace) -> int:
         pattern = re.compile(args.regex)
         pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
     _render_page_table(pages, as_json=args.json)
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_search(args: argparse.Namespace) -> int:
     client = build_client()
     pages = client.search_pages(query=args.text)
     _render_page_table(pages, as_json=args.json)
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_exists(args: argparse.Namespace) -> int:
@@ -107,7 +120,7 @@ def cmd_exists(args: argparse.Namespace) -> int:
         emit({"path": args.path, "exists": exists})
     else:
         print(f"exists: {args.path}" if exists else f"missing: {args.path}")
-    return 0 if exists else 1
+    return EXIT_SUCCESS if exists else EXIT_NOT_FOUND
 
 
 def cmd_get(args: argparse.Namespace) -> int:
@@ -115,12 +128,12 @@ def cmd_get(args: argparse.Namespace) -> int:
     page = client.get_page_by_path(args.path)
     if not page:
         print(f"No page found at path: {args.path}", file=sys.stderr)
-        return 1
+        return EXIT_NOT_FOUND
     if args.json:
         emit(page.to_dict())
     else:
         print(page.content)
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_upsert(args: argparse.Namespace) -> int:
@@ -257,7 +270,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
                     print("\n" + "\n".join(diff_lines))
                 else:
                     print("\n(no diff)")
-        return 0
+        return EXIT_SUCCESS
     result = client.upsert_page(
         path=args.path,
         title=args.title,
@@ -280,7 +293,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
             details.append("tags preserved")
         suffix = f" [{', '.join(details)}]" if details else ""
         print(f"{result.action}: {args.path} ({response.get('message', 'ok')}){suffix}")
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
@@ -316,14 +329,14 @@ def cmd_delete(args: argparse.Namespace) -> int:
                 print(f"dry-run: would delete {existing.path} (id {existing.id}, title {existing.title!r})")
             else:
                 print(f"dry-run: would not delete {args.path} (page not found)")
-        return 0
+        return EXIT_SUCCESS
     result = client.delete_page_by_path(args.path)
     if args.json:
         emit(result.to_dict())
     else:
         response = result.to_dict().get("responseResult", {})
         print(f"deleted: {args.path} ({response.get('message', 'ok')})")
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_move(args: argparse.Namespace) -> int:
@@ -392,14 +405,14 @@ def cmd_move(args: argparse.Namespace) -> int:
                     f"dry-run: would not move {existing.path} "
                     f"(no change; id {existing.id}, title {existing.title!r})"
                 )
-        return 0
+        return EXIT_SUCCESS
     result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
     if args.json:
         emit(result.to_dict())
     else:
         response = result.to_dict().get("responseResult", {})
         print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')})")
-    return 0
+    return EXIT_SUCCESS
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -497,12 +510,21 @@ def main(argv: list[str] | None = None) -> int:
         if not hasattr(args, "func"):
             parser.error("a command is required unless --versioncheck is used")
         return args.func(args)
+    except WikiJsNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_NOT_FOUND
+    except WikiJsAmbiguousMatchError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_AMBIGUOUS
+    except (WikiJsValidationError, WikiJsConflictError, WikiJsSchemaError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_VALIDATION
     except WikiJsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_GENERAL_FAILURE
     except OSError as exc:
         print(f"File error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_VALIDATION
 
 
 if __name__ == "__main__":

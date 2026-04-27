@@ -5,6 +5,8 @@ Supported top-level imports are intentionally small and stable:
 - WikiJsError
 - WikiJsSchemaError
 - WikiJsConflictError
+- WikiJsAmbiguousMatchError
+- WikiJsNotFoundError
 - WikiJsValidationError
 - PageSummary
 - PageDetail
@@ -14,7 +16,15 @@ Supported top-level imports are intentionally small and stable:
 - __version__
 """
 
-from .client import WikiJsClient, WikiJsError, WikiJsSchemaError, WikiJsConflictError, WikiJsValidationError
+from .client import (
+    WikiJsAmbiguousMatchError,
+    WikiJsClient,
+    WikiJsConflictError,
+    WikiJsError,
+    WikiJsNotFoundError,
+    WikiJsSchemaError,
+    WikiJsValidationError,
+)
 from .models import MutationResult, PageDetail, PageSummary, PageTag, SiteVersion
 
 __version__ = "0.1.2"
@@ -24,6 +34,8 @@ __all__ = [
     "WikiJsError",
     "WikiJsSchemaError",
     "WikiJsConflictError",
+    "WikiJsAmbiguousMatchError",
+    "WikiJsNotFoundError",
     "WikiJsValidationError",
     "MutationResult",
     "PageDetail",

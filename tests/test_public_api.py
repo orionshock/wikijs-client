@@ -1,4 +1,18 @@
-from wikijs_client import MutationResult, PageDetail, PageSummary, PageTag, SiteVersion, WikiJsClient, WikiJsConflictError, WikiJsError, WikiJsSchemaError, WikiJsValidationError, __version__
+from wikijs_client import (
+    MutationResult,
+    PageDetail,
+    PageSummary,
+    PageTag,
+    SiteVersion,
+    WikiJsAmbiguousMatchError,
+    WikiJsClient,
+    WikiJsConflictError,
+    WikiJsError,
+    WikiJsNotFoundError,
+    WikiJsSchemaError,
+    WikiJsValidationError,
+    __version__,
+)
 
 
 def test_top_level_exports_are_available():
@@ -6,6 +20,8 @@ def test_top_level_exports_are_available():
     assert WikiJsError is not None
     assert WikiJsSchemaError is not None
     assert WikiJsConflictError is not None
+    assert WikiJsAmbiguousMatchError is not None
+    assert WikiJsNotFoundError is not None
     assert WikiJsValidationError is not None
     assert PageSummary is not None
     assert PageDetail is not None
@@ -23,6 +39,8 @@ def test_top_level_all_includes_supported_public_api():
         "WikiJsError",
         "WikiJsSchemaError",
         "WikiJsConflictError",
+        "WikiJsAmbiguousMatchError",
+        "WikiJsNotFoundError",
         "WikiJsValidationError",
         "MutationResult",
         "PageDetail",

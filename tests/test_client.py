@@ -3,7 +3,15 @@ from __future__ import annotations
 import pytest
 import requests
 
-from wikijs_client.client import WikiJsClient, WikiJsConflictError, WikiJsError, WikiJsSchemaError, WikiJsValidationError
+from wikijs_client.client import (
+    WikiJsAmbiguousMatchError,
+    WikiJsClient,
+    WikiJsConflictError,
+    WikiJsError,
+    WikiJsNotFoundError,
+    WikiJsSchemaError,
+    WikiJsValidationError,
+)
 from wikijs_client.models import MutationResult, PageDetail, PageSummary, PageTag
 
 
@@ -172,7 +180,7 @@ def test_search_lookup_raises_on_ambiguous_exact_matches(monkeypatch):
         }
 
     monkeypatch.setattr(client, "_post", fake_post)
-    with pytest.raises(WikiJsError, match="Multiple pages matched path exactly via pages.search"):
+    with pytest.raises(WikiJsAmbiguousMatchError, match="Multiple pages matched path exactly via pages.search"):
         client._find_page_summary_by_path_via_search("docs/example-page")
 
 
@@ -343,6 +351,13 @@ def test_move_page_raises_when_destination_exists(monkeypatch):
         client.move_page(source_path="ideas/old", destination_path="ideas/new")
 
 
+def test_move_page_raises_not_found_for_missing_source(monkeypatch):
+    client = WikiJsClient(url="https://example.invalid/graphql", token="token")
+    monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
+    with pytest.raises(WikiJsNotFoundError, match="No page found at path: ideas/missing"):
+        client.move_page(source_path="ideas/missing", destination_path="ideas/new")
+
+
 def test_move_page_rejects_same_source_and_destination(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: PageDetail(id=42, path="ideas/old", title="Old Title", content="body", description="desc", tags=[]))
@@ -431,13 +446,8 @@ def test_update_page_raises_validation_error_on_invalid_payload(monkeypatch):
 def test_delete_page_by_path_raises_when_missing(monkeypatch):
     client = WikiJsClient(url="https://example.invalid/graphql", token="token")
     monkeypatch.setattr(client, "get_page_by_path", lambda path: None)
-
-    try:
+    with pytest.raises(WikiJsNotFoundError, match="No page found at path: ideas/missing"):
         client.delete_page_by_path("ideas/missing")
-    except WikiJsError as exc:
-        assert "No page found" in str(exc)
-    else:
-        raise AssertionError("Expected WikiJsError")
 
 
 def test_delete_page_normalizes_path(monkeypatch):
@@ -449,7 +459,7 @@ def test_delete_page_normalizes_path(monkeypatch):
         return None
 
     monkeypatch.setattr(client, "get_page_by_path", fake_get)
-    with pytest.raises(WikiJsError, match="No page found"):
+    with pytest.raises(WikiJsNotFoundError, match="No page found"):
         client.delete_page_by_path(" /ideas/missing/ ")
     assert seen["path"] == "ideas/missing"
 

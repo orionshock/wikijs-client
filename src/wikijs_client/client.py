@@ -22,6 +22,14 @@ class WikiJsConflictError(WikiJsError):
     """Raised when a mutation fails due to a path conflict or similar collision."""
 
 
+class WikiJsAmbiguousMatchError(WikiJsError):
+    """Raised when an operation cannot safely resolve a single page target."""
+
+
+class WikiJsNotFoundError(WikiJsError):
+    """Raised when an exact-path operation cannot find its target page."""
+
+
 class WikiJsValidationError(WikiJsError):
     """Raised when a mutation fails validation before any useful state change occurs."""
 
@@ -237,7 +245,7 @@ class WikiJsClient:
             return None
         if len(exact_matches) > 1:
             ids = ", ".join(str(page.id) for page in exact_matches)
-            raise WikiJsError(f"Multiple pages matched path exactly via {source}: {path} (ids: {ids})")
+            raise WikiJsAmbiguousMatchError(f"Multiple pages matched path exactly via {source}: {path} (ids: {ids})")
         return exact_matches[0]
 
     def _find_page_summary_by_path_via_search(self, path: str) -> PageSummary | None:
@@ -546,7 +554,7 @@ class WikiJsClient:
         destination_path = _normalize_path(destination_path)
         existing = self.get_page_by_path(source_path)
         if not existing:
-            raise WikiJsError(f"No page found at path: {source_path}")
+            raise WikiJsNotFoundError(f"No page found at path: {source_path}")
         if source_path == destination_path and title is None:
             raise WikiJsError("source and destination paths are the same")
         destination_existing = self.get_page_by_path(destination_path)
@@ -582,7 +590,7 @@ class WikiJsClient:
         path = _normalize_path(path)
         existing = self.get_page_by_path(path)
         if not existing:
-            raise WikiJsError(f"No page found at path: {path}")
+            raise WikiJsNotFoundError(f"No page found at path: {path}")
         mutation = """
         mutation ($id: Int!) {
           pages {

@@ -153,6 +153,33 @@ Environment variables:
 - `WIKIJS_TOKEN`
 - `WIKIJS_LOCALE` (optional, default: `en`)
 
+## Exit codes
+
+The CLI uses typed exit codes so automation can distinguish common failure modes without parsing human-readable error text.
+
+- `0` — success
+- `1` — general failure
+- `2` — not found
+  - exact-path target does not exist
+- `3` — ambiguous match
+  - the client found more than one exact-path candidate and refused to guess
+- `4` — validation, auth, config, schema, conflict, or file error
+  - missing `WIKIJS_URL` / `WIKIJS_TOKEN`
+  - invalid input
+  - Wiki.js schema mismatch
+  - mutation conflict or validation failure
+  - local file read/write issue
+
+Examples:
+
+```bash
+wikijs-client exists docs/missing
+# exits 2 when missing
+
+wikijs-client get docs/missing
+# exits 2 when missing
+```
+
 ## Installation
 
 ### Install with pip

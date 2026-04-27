@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from wikijs_client import cli
-from wikijs_client.client import WikiJsError
+from wikijs_client.client import WikiJsAmbiguousMatchError, WikiJsError, WikiJsNotFoundError, WikiJsValidationError
 from wikijs_client.models import MutationResult, PageDetail, PageSummary, SiteVersion
 
 
@@ -154,7 +154,7 @@ def test_cmd_exists_json_found(monkeypatch, capsys):
 def test_cmd_exists_json_missing(monkeypatch, capsys):
     monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
     args = cli.argparse.Namespace(path="ideas/missing", json=True)
-    assert cli.cmd_exists(args) == 1
+    assert cli.cmd_exists(args) == cli.EXIT_NOT_FOUND
     out = json.loads(capsys.readouterr().out)
     assert out["exists"] is False
 
@@ -424,9 +424,55 @@ def test_main_reports_wikijs_error(monkeypatch, capsys):
 def test_main_reports_missing_env(capsys, monkeypatch):
     monkeypatch.delenv("WIKIJS_URL", raising=False)
     monkeypatch.delenv("WIKIJS_TOKEN", raising=False)
-    assert cli.main(["list"]) != 0
+    assert cli.main(["list"]) == cli.EXIT_VALIDATION
     err = capsys.readouterr().err
     assert "WIKIJS_URL and WIKIJS_TOKEN must be set" in err
+
+
+def test_cmd_get_missing_returns_not_found(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda: DummyClient())
+    args = cli.argparse.Namespace(path="ideas/missing", json=False)
+    assert cli.cmd_get(args) == cli.EXIT_NOT_FOUND
+    err = capsys.readouterr().err
+    assert "No page found at path: ideas/missing" in err
+
+
+def test_main_reports_not_found_with_typed_exit_code(monkeypatch, capsys):
+    def fake_build_client():
+        class MissingClient(DummyClient):
+            def delete_page_by_path(self, path):
+                raise WikiJsNotFoundError(f"No page found at path: {path}")
+
+        return MissingClient()
+
+    monkeypatch.setattr(cli, "build_client", fake_build_client)
+    assert cli.main(["delete", "ideas/missing"]) == cli.EXIT_NOT_FOUND
+    err = capsys.readouterr().err
+    assert "No page found at path: ideas/missing" in err
+
+
+def test_main_reports_ambiguous_with_typed_exit_code(monkeypatch, capsys):
+    def fake_build_client():
+        class AmbiguousClient(DummyClient):
+            def get_page_by_path(self, path):
+                raise WikiJsAmbiguousMatchError(f"Multiple pages matched path exactly via pages.search: {path}")
+
+        return AmbiguousClient()
+
+    monkeypatch.setattr(cli, "build_client", fake_build_client)
+    assert cli.main(["exists", "ideas/a"]) == cli.EXIT_AMBIGUOUS
+    err = capsys.readouterr().err
+    assert "Multiple pages matched path exactly" in err
+
+
+def test_main_reports_validation_with_typed_exit_code(monkeypatch, capsys):
+    def fake_build_client():
+        raise WikiJsValidationError("bad config")
+
+    monkeypatch.setattr(cli, "build_client", fake_build_client)
+    assert cli.main(["list"]) == cli.EXIT_VALIDATION
+    err = capsys.readouterr().err
+    assert "Error: bad config" in err
 
 
 def test_main_supports_versioncheck_flag(monkeypatch, capsys):
