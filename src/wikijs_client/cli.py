@@ -286,15 +286,36 @@ def cmd_upsert(args: argparse.Namespace) -> int:
 def cmd_delete(args: argparse.Namespace) -> int:
     client = build_client()
     if args.dry_run:
+        existing = client.get_page_by_path(args.path)
         payload = {
             "action": "delete",
             "dry_run": True,
-            "path": args.path,
+            "wouldMutate": bool(existing),
+            "target": {
+                "path": args.path,
+            },
+            "changed": {
+                "created": False,
+                "updated": False,
+                "deleted": bool(existing),
+            },
+            "metadata": {
+                "found": bool(existing),
+            },
         }
+        if existing:
+            payload["resolvedPage"] = {
+                "id": existing.id,
+                "path": existing.path,
+                "title": existing.title,
+            }
         if args.json:
             emit(payload)
         else:
-            print(f"dry-run: delete {args.path}")
+            if existing:
+                print(f"dry-run: would delete {existing.path} (id {existing.id}, title {existing.title!r})")
+            else:
+                print(f"dry-run: would not delete {args.path} (page not found)")
         return 0
     result = client.delete_page_by_path(args.path)
     if args.json:
@@ -308,18 +329,69 @@ def cmd_delete(args: argparse.Namespace) -> int:
 def cmd_move(args: argparse.Namespace) -> int:
     client = build_client()
     if args.dry_run:
+        existing = client.get_page_by_path(args.source_path)
+        destination_existing = client.get_page_by_path(args.destination_path)
+        resolved_title = args.title if args.title is not None else (existing.title if existing else None)
+        destination_conflict = bool(existing and destination_existing and destination_existing.id != existing.id)
+        source_found = bool(existing)
+        path_changed = bool(existing and existing.path != args.destination_path)
+        title_changed = bool(existing and resolved_title is not None and existing.title != resolved_title)
+        would_mutate = bool(source_found and not destination_conflict and (path_changed or title_changed))
         payload = {
             "action": "move",
             "dry_run": True,
-            "source_path": args.source_path,
-            "destination_path": args.destination_path,
-            "title": args.title,
+            "wouldMutate": would_mutate,
+            "target": {
+                "source_path": args.source_path,
+                "destination_path": args.destination_path,
+                "title": resolved_title,
+            },
+            "changed": {
+                "created": False,
+                "updated": would_mutate,
+                "deleted": False,
+                "path": path_changed,
+                "title": title_changed,
+            },
+            "metadata": {
+                "source_found": source_found,
+                "destination_exists": bool(destination_existing),
+                "destination_conflict": destination_conflict,
+            },
         }
+        if existing:
+            payload["resolvedPage"] = {
+                "id": existing.id,
+                "path": existing.path,
+                "title": existing.title,
+            }
+        if destination_existing:
+            payload["destinationPage"] = {
+                "id": destination_existing.id,
+                "path": destination_existing.path,
+                "title": destination_existing.title,
+            }
         if args.json:
             emit(payload)
         else:
-            title_note = f" with title {args.title!r}" if args.title else ""
-            print(f"dry-run: move {args.source_path} -> {args.destination_path}{title_note}")
+            title_note = f", title {resolved_title!r}" if resolved_title is not None else ""
+            if not existing:
+                print(f"dry-run: would not move {args.source_path} (page not found)")
+            elif destination_conflict:
+                print(
+                    f"dry-run: would not move {existing.path} -> {args.destination_path} "
+                    f"(destination exists: id {destination_existing.id}, title {destination_existing.title!r})"
+                )
+            elif would_mutate:
+                print(
+                    f"dry-run: would move {existing.path} -> {args.destination_path} "
+                    f"(id {existing.id}, title {existing.title!r}{title_note})"
+                )
+            else:
+                print(
+                    f"dry-run: would not move {existing.path} "
+                    f"(no change; id {existing.id}, title {existing.title!r})"
+                )
         return 0
     result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
     if args.json:

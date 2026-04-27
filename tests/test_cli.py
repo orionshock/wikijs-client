@@ -250,6 +250,27 @@ def test_cmd_delete_dry_run(monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "delete"
     assert out["dry_run"] is True
+    assert out["wouldMutate"] is False
+    assert out["target"]["path"] == "ideas/test"
+    assert out["changed"]["deleted"] is False
+    assert out["metadata"]["found"] is False
+    assert client.deleted == []
+
+
+def test_cmd_delete_dry_run_found_json(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(path="ideas/a", dry_run=True, json=True)
+    assert cli.cmd_delete(args) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "delete"
+    assert out["dry_run"] is True
+    assert out["wouldMutate"] is True
+    assert out["target"]["path"] == "ideas/a"
+    assert out["resolvedPage"]["id"] == 1
+    assert out["resolvedPage"]["path"] == "ideas/a"
+    assert out["changed"]["deleted"] is True
+    assert out["metadata"]["found"] is True
     assert client.deleted == []
 
 
@@ -313,8 +334,59 @@ def test_cmd_move_dry_run(monkeypatch, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["action"] == "move"
     assert out["dry_run"] is True
-    assert out["title"] == "B"
+    assert out["wouldMutate"] is True
+    assert out["target"]["source_path"] == "ideas/a"
+    assert out["target"]["destination_path"] == "ideas/b"
+    assert out["target"]["title"] == "B"
+    assert out["resolvedPage"]["id"] == 1
+    assert out["changed"]["updated"] is True
+    assert out["changed"]["path"] is True
+    assert out["changed"]["title"] is True
+    assert out["metadata"]["source_found"] is True
+    assert out["metadata"]["destination_exists"] is False
+    assert out["metadata"]["destination_conflict"] is False
     assert client.moved == []
+
+
+def test_cmd_delete_dry_run_human_output_found(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(path="ideas/a", dry_run=True, json=False)
+    assert cli.cmd_delete(args) == 0
+    out = capsys.readouterr().out
+    assert "dry-run: would delete ideas/a" in out
+    assert "id 1" in out
+    assert "title 'A'" in out
+
+
+def test_cmd_delete_dry_run_human_output_missing(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(path="ideas/test", dry_run=True, json=False)
+    assert cli.cmd_delete(args) == 0
+    out = capsys.readouterr().out
+    assert "dry-run: would not delete ideas/test (page not found)" in out
+
+
+def test_cmd_move_dry_run_human_output(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(source_path="ideas/a", destination_path="ideas/b", title="B", dry_run=True, json=False)
+    assert cli.cmd_move(args) == 0
+    out = capsys.readouterr().out
+    assert "dry-run: would move ideas/a -> ideas/b" in out
+    assert "id 1" in out
+    assert "title 'A'" in out
+    assert "title 'B'" in out
+
+
+def test_cmd_move_dry_run_human_output_missing(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda: client)
+    args = cli.argparse.Namespace(source_path="ideas/missing", destination_path="ideas/b", title=None, dry_run=True, json=False)
+    assert cli.cmd_move(args) == 0
+    out = capsys.readouterr().out
+    assert "dry-run: would not move ideas/missing (page not found)" in out
 
 
 def test_build_parser_includes_new_commands():
