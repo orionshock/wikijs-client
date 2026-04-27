@@ -412,6 +412,7 @@ def test_build_parser_includes_new_commands():
     assert "delete" in help_text
     assert "move" in help_text
     assert "--versioncheck" in help_text
+    assert "--quiet" in help_text
     assert "--debug" in help_text
     assert "wikijs-client 0.1.2" in help_text
     assert "Use --json to emit structured output." in help_text
@@ -494,6 +495,67 @@ def test_main_supports_versioncheck_flag(monkeypatch, capsys):
     assert cli.main(["--versioncheck", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["targetVersion"] == "2.5.312"
+
+
+def test_main_supports_quiet_versioncheck(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.main(["--versioncheck", "--quiet"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_quiet_exists_suppresses_success_stdout(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.main(["exists", "ideas/a", "--quiet"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_quiet_get_suppresses_success_stdout(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.main(["get", "ideas/a", "--quiet"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_quiet_delete_suppresses_success_stdout(monkeypatch, capsys):
+    client = DummyClient()
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: client)
+    assert cli.main(["delete", "ideas/test", "--quiet"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert client.deleted == ["ideas/test"]
+
+
+def test_quiet_preserves_stderr_errors(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.main(["get", "ideas/missing", "--quiet"]) == cli.EXIT_NOT_FOUND
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "No page found at path: ideas/missing" in captured.err
+
+
+def test_quiet_and_json_are_mutually_exclusive(capsys):
+    try:
+        cli.main(["exists", "ideas/a", "--quiet", "--json"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser to exit")
+    captured = capsys.readouterr()
+    assert "--quiet and --json cannot be used together" in captured.err
+
+
+def test_quiet_flag_works_before_subcommand_too(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    assert cli.main(["--quiet", "exists", "ideas/a"]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_debug_output_goes_to_stderr_and_json_stdout_stays_parseable(monkeypatch, capsys):

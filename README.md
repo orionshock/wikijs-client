@@ -20,7 +20,55 @@ A small Python CLI and library for practical Wiki.js GraphQL page operations.
 - `--versioncheck`
   - check the server version against the project target (`2.5.312`)
 - `--json`
-  - emit structured JSON instead of human-readable output for `--versioncheck`
+  - emit structured JSON instead of human-readable output
+- `--quiet`
+  - suppress successful stdout output; errors still go to stderr
+- `--debug`
+  - emit debug details to stderr without contaminating stdout
+
+## Output modes
+
+### Default mode
+
+- human-readable stdout
+- errors go to stderr
+
+### `--json`
+
+- emits structured JSON to stdout
+- preserves typed exit codes
+- can be used with normal commands and `--versioncheck`
+- cannot be combined with `--quiet`
+
+### `--quiet`
+
+Actual contract:
+
+- suppresses successful stdout output for all commands, including reads and mutations
+- does not change exit codes
+- does not suppress stderr
+- still performs the underlying operation
+- can be used either before or after the subcommand
+- cannot be combined with `--json`
+
+Practical examples:
+
+- `exists --quiet`
+  - prints nothing
+  - exits `0` when found, `2` when missing
+- `get --quiet`
+  - prints nothing on success
+  - still exits nonzero and prints an error on failure
+- mutating commands with `--quiet`
+  - still mutate on success
+  - print nothing on success
+  - still print errors to stderr
+
+### `--debug`
+
+- writes diagnostics to stderr only
+- keeps stdout clean for human output or JSON pipelines
+- never intentionally prints the auth token or other raw secrets
 
 ### `list`
 
@@ -93,6 +141,12 @@ Flags:
   - replace existing description instead of preserving it when omitted
 - `--replace-tags`
   - replace existing tags instead of preserving them when omitted
+- `--dry-run`
+  - preview whether upsert would create or update without mutating
+- `--diff`
+  - with `--dry-run`, include a unified diff of content changes
+- `--quiet`
+  - suppress successful stdout output
 - `--json`
   - emit structured JSON
 
@@ -111,6 +165,8 @@ Flags:
   - optional new title; defaults to the existing title
 - `--dry-run`
   - preview the move without applying it
+- `--quiet`
+  - suppress successful stdout output
 - `--json`
   - emit structured JSON
 
@@ -123,6 +179,8 @@ Arguments and flags:
   - exact page path to delete
 - `--dry-run`
   - preview the delete without applying it
+- `--quiet`
+  - suppress successful stdout output
 - `--json`
   - emit structured JSON
 

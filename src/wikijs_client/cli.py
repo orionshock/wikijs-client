@@ -68,6 +68,10 @@ def emit(data: Any) -> None:
     print(json.dumps(data, indent=2))
 
 
+def is_quiet(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "quiet", False))
+
+
 def truncate(value: str, width: int) -> str:
     """Truncate a string for compact human-readable table output."""
     if len(value) <= width:
@@ -118,20 +122,28 @@ def run_versioncheck(*, as_json: bool, debug: bool) -> int:
     return EXIT_SUCCESS
 
 
+def run_versioncheck_quiet(*, debug: bool) -> int:
+    client = build_client(debug=debug)
+    client.get_version(target_version=TARGET_WIKIJS_VERSION)
+    return EXIT_SUCCESS
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     client = build_client(debug=getattr(args, "debug", False))
     pages = client.list_pages(query=args.query or "", path=args.path or "")
     if args.regex:
         pattern = re.compile(args.regex)
         pages = [p for p in pages if pattern.search(p.path) or pattern.search(p.title) or pattern.search(p.description)]
-    _render_page_table(pages, as_json=args.json)
+    if not is_quiet(args):
+        _render_page_table(pages, as_json=args.json)
     return EXIT_SUCCESS
 
 
 def cmd_search(args: argparse.Namespace) -> int:
     client = build_client(debug=getattr(args, "debug", False))
     pages = client.search_pages(query=args.text)
-    _render_page_table(pages, as_json=args.json)
+    if not is_quiet(args):
+        _render_page_table(pages, as_json=args.json)
     return EXIT_SUCCESS
 
 
@@ -141,7 +153,7 @@ def cmd_exists(args: argparse.Namespace) -> int:
     exists = page is not None
     if args.json:
         emit({"path": args.path, "exists": exists})
-    else:
+    elif not is_quiet(args):
         print(f"exists: {args.path}" if exists else f"missing: {args.path}")
     return EXIT_SUCCESS if exists else EXIT_NOT_FOUND
 
@@ -154,7 +166,7 @@ def cmd_get(args: argparse.Namespace) -> int:
         return EXIT_NOT_FOUND
     if args.json:
         emit(page.to_dict())
-    else:
+    elif not is_quiet(args):
         print(page.content)
     return EXIT_SUCCESS
 
@@ -246,7 +258,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
             )
         if args.json:
             emit(payload)
-        else:
+        elif not is_quiet(args):
             details = []
             summary = payload["metadata"]["change_summary"]
             content_summary = summary["content"]
@@ -305,7 +317,7 @@ def cmd_upsert(args: argparse.Namespace) -> int:
     )
     if args.json:
         emit(result.to_dict())
-    else:
+    elif not is_quiet(args):
         result_payload = result.to_dict()
         response = result_payload.get("responseResult", {})
         details = []
@@ -347,7 +359,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
             }
         if args.json:
             emit(payload)
-        else:
+        elif not is_quiet(args):
             if existing:
                 print(f"dry-run: would delete {existing.path} (id {existing.id}, title {existing.title!r})")
             else:
@@ -356,7 +368,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
     result = client.delete_page_by_path(args.path)
     if args.json:
         emit(result.to_dict())
-    else:
+    elif not is_quiet(args):
         response = result.to_dict().get("responseResult", {})
         print(f"deleted: {args.path} ({response.get('message', 'ok')})")
     return EXIT_SUCCESS
@@ -409,7 +421,7 @@ def cmd_move(args: argparse.Namespace) -> int:
             }
         if args.json:
             emit(payload)
-        else:
+        elif not is_quiet(args):
             title_note = f", title {resolved_title!r}" if resolved_title is not None else ""
             if not existing:
                 print(f"dry-run: would not move {args.source_path} (page not found)")
@@ -432,7 +444,7 @@ def cmd_move(args: argparse.Namespace) -> int:
     result = client.move_page(source_path=args.source_path, destination_path=args.destination_path, title=args.title)
     if args.json:
         emit(result.to_dict())
-    else:
+    elif not is_quiet(args):
         response = result.to_dict().get("responseResult", {})
         print(f"moved: {args.source_path} -> {args.destination_path} ({response.get('message', 'ok')})")
     return EXIT_SUCCESS
@@ -451,6 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--versioncheck", action="store_true", help=f"check the server version against the project target ({TARGET_WIKIJS_VERSION})")
     parser.add_argument("--json", action="store_true", help="emit structured JSON instead of human-readable output")
+    parser.add_argument("--quiet", action="store_true", help="suppress successful stdout output; errors still go to stderr")
     parser.add_argument("--debug", action="store_true", help="emit debug details to stderr without contaminating stdout")
     sub = parser.add_subparsers(dest="command")
 
@@ -462,6 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--query", help="text to pass to Wiki.js search query")
     p_list.add_argument("--path", help="path to pass to Wiki.js search for scoped discovery")
     p_list.add_argument("--regex", help="regular expression filter across returned path, title, and description")
+    p_list.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_list.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_list.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_list.set_defaults(func=cmd_list)
@@ -472,6 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Search pages using pages.search(path='', query=TEXT). This is the preferred global text search command when you want ranked search results rather than full-wiki list filtering.",
     )
     p_search.add_argument("text", help="search text to send to Wiki.js search")
+    p_search.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_search.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_search.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_search.set_defaults(func=cmd_search)
@@ -482,6 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check whether a page exists at an exact path. This prefers targeted lookup, but verifies exact matches safely and falls back to full page listing when Wiki.js search results are stale or inconsistent.",
     )
     p_exists.add_argument("path", help="exact page path to check")
+    p_exists.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_exists.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_exists.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_exists.set_defaults(func=cmd_exists)
@@ -492,6 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Fetch page content by exact path using the same verified exact-path lookup flow as the exists command.",
     )
     p_get.add_argument("path")
+    p_get.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.set_defaults(func=cmd_get)
@@ -510,6 +527,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_upsert.add_argument("--replace-tags", action="store_true", help="replace existing tags instead of preserving them when omitted")
     p_upsert.add_argument("--dry-run", action="store_true", help="preview whether upsert would create or update without mutating")
     p_upsert.add_argument("--diff", action="store_true", help="with --dry-run, include a unified diff of content changes")
+    p_upsert.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_upsert.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_upsert.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_upsert.set_defaults(func=cmd_upsert)
@@ -517,6 +535,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_delete = sub.add_parser("delete", help="delete a page by exact path")
     p_delete.add_argument("path")
     p_delete.add_argument("--dry-run", action="store_true")
+    p_delete.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_delete.set_defaults(func=cmd_delete)
@@ -526,6 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_move.add_argument("destination_path")
     p_move.add_argument("--title", help="optional new title; defaults to the existing title")
     p_move.add_argument("--dry-run", action="store_true")
+    p_move.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_move.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_move.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_move.set_defaults(func=cmd_move)
@@ -535,9 +555,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "json", False) and getattr(args, "quiet", False):
+        parser.error("--quiet and --json cannot be used together")
     try:
         if args.versioncheck:
             _debug_emit(args.debug, f"command=versioncheck args={_summarize_args(args)}")
+            if args.quiet:
+                return run_versioncheck_quiet(debug=args.debug)
             return run_versioncheck(as_json=args.json, debug=args.debug)
         if not hasattr(args, "func"):
             parser.error("a command is required unless --versioncheck is used")
