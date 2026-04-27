@@ -40,6 +40,7 @@ Check whether a page exists at an exact path.
 ### `get`
 Fetch page content by exact path.
 - `path`
+- `--file FILE`
 
 ### `upsert`
 Create a page when it does not exist, or update it when it does.
@@ -70,6 +71,7 @@ For safety, real deletes require `--force`.
 
 ```bash
 wikijs-client exists docs/getting-started
+wikijs-client get docs/getting-started --file getting-started.md
 wikijs-client delete docs/scratch --dry-run
 ```
 

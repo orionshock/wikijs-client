@@ -68,6 +68,13 @@ def emit(data: Any) -> None:
     print(json.dumps(data, indent=2))
 
 
+def emit_to_file(path: str, data: str) -> None:
+    """Write command output to a file, creating parent directories when needed."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(data)
+
+
 def is_quiet(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "quiet", False))
 
@@ -178,7 +185,13 @@ def cmd_get(args: argparse.Namespace) -> int:
         print(f"No page found at path: {args.path}", file=sys.stderr)
         return EXIT_NOT_FOUND
     if args.json:
-        emit(page.to_dict())
+        payload = json.dumps(page.to_dict(), indent=2)
+        if getattr(args, "file", None):
+            emit_to_file(args.file, payload + "\n")
+        else:
+            print(payload)
+    elif getattr(args, "file", None):
+        emit_to_file(args.file, page.content)
     elif not is_quiet(args):
         print(page.content)
     return EXIT_SUCCESS
@@ -532,6 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Fetch page content by exact path using the same verified exact-path lookup flow as the exists command.",
     )
     p_get.add_argument("path")
+    p_get.add_argument("--file", help="write fetched output to a file instead of stdout")
     p_get.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     p_get.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)

@@ -191,6 +191,29 @@ def test_cmd_get_json(monkeypatch, capsys):
     assert out["path"] == "ideas/a"
 
 
+def test_cmd_get_writes_content_to_file(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    out_path = tmp_path / "nested" / "page.md"
+    args = cli.argparse.Namespace(path="ideas/a", json=False, file=str(out_path))
+    assert cli.cmd_get(args) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert out_path.read_text() == "hello"
+
+
+def test_cmd_get_writes_json_to_file(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    out_path = tmp_path / "page.json"
+    args = cli.argparse.Namespace(path="ideas/a", json=True, file=str(out_path))
+    assert cli.cmd_get(args) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    payload = json.loads(out_path.read_text())
+    assert payload["path"] == "ideas/a"
+
+
 def test_cmd_upsert_reads_file(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
     p = tmp_path / "body.md"
@@ -563,6 +586,27 @@ def test_quiet_get_suppresses_success_stdout(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_get_file_writes_without_stdout(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    out_path = tmp_path / "page.md"
+    assert cli.main(["get", "ideas/a", "--file", str(out_path)]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    assert out_path.read_text() == "hello"
+
+
+def test_get_json_file_writes_without_stdout(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "build_client", lambda **kwargs: DummyClient())
+    out_path = tmp_path / "page.json"
+    assert cli.main(["get", "ideas/a", "--json", "--file", str(out_path)]) == cli.EXIT_SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    payload = json.loads(out_path.read_text())
+    assert payload["path"] == "ideas/a"
 
 
 def test_quiet_delete_suppresses_success_stdout(monkeypatch, capsys):
