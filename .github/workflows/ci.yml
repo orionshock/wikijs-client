@@ -2,7 +2,15 @@ name: ci
 
 on:
   push:
+    paths:
+      - 'pyproject.toml'
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
   pull_request:
+    paths:
+      - 'pyproject.toml'
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
 
 jobs:
   test-build-smoke:
